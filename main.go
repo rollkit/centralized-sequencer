@@ -8,14 +8,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
-	"github.com/rollkit/centralized-sequencer/centralized"
+	"github.com/rollkit/centralized-sequencer/sequencing"
 	sequencingGRPC "github.com/rollkit/go-sequencing/proxy/grpc"
 )
 
 const (
-	defaultHost = "localhost"
-	defaultPort = "50051"
+	defaultHost      = "localhost"
+	defaultPort      = "50051"
+	defaultBatchTime = time.Duration(2 * time.Second)
 )
 
 func main() {
@@ -23,13 +25,13 @@ func main() {
 		host          string
 		port          string
 		listenAll     bool
-		batchTime     int64
+		batchTime     time.Duration
 		da_namespace  string
 		da_auth_token string
 	)
 	flag.StringVar(&port, "port", defaultPort, "listening port")
 	flag.StringVar(&host, "host", defaultHost, "listening address")
-	flag.Int64Var(&batchTime, "batch-time", 2, "time in seconds to wait before generating a new batch")
+	flag.DurationVar(&batchTime, "batch-time", defaultBatchTime, "time in seconds to wait before generating a new batch")
 	flag.StringVar(&da_namespace, "da_namespace", "", "DA namespace where the sequencer submits transactions")
 	flag.StringVar(&da_auth_token, "da_auth_token", "", "auth token for the DA")
 	flag.BoolVar(&listenAll, "listen-all", false, "listen on all network interfaces (0.0.0.0) instead of just localhost")
@@ -39,12 +41,13 @@ func main() {
 		host = "0.0.0.0"
 	}
 
-	lis, err := net.Listen("tcp", ":50051")
+	address := fmt.Sprintf("%s:%s", host, port)
+	lis, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	centralizedSeq, err := centralized.NewSequencer()
+	centralizedSeq, err := sequencing.NewSequencer(address, da_auth_token, da_namespace, batchTime)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}

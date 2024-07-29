@@ -10,9 +10,10 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
+	logging "github.com/ipfs/go-log/v2"
+
 	goDA "github.com/rollkit/go-da"
 	"github.com/rollkit/go-sequencing"
-	"github.com/rollkit/rollkit/third_party/log"
 	"github.com/rollkit/rollkit/types"
 	pb "github.com/rollkit/rollkit/types/pb/rollkit"
 )
@@ -51,6 +52,8 @@ var (
 	ErrContextDeadline = errors.New("context deadline")
 )
 
+var log = logging.Logger("centralized-sequencer/da")
+
 // StatusCode is a type for DA layer return status.
 // TODO: define an enum of different non-happy-path cases
 // that might need to be handled by Rollkit independent of
@@ -81,7 +84,7 @@ type BaseResult struct {
 	SubmittedCount uint64
 }
 
-// ResultSubmit contains information returned from DA layer after block headers/data submission.
+// ResultSubmitBatch contains information returned from DA layer after block headers/data submission.
 type ResultSubmitBatch struct {
 	BaseResult
 	// Not sure if this needs to be bubbled up to other
@@ -102,28 +105,25 @@ type DAClient struct {
 	DA              goDA.DA
 	GasPrice        float64
 	GasMultiplier   float64
-	HeaderNamespace goDA.Namespace
-	DataNamespace   goDA.Namespace
+	Namespace       goDA.Namespace
 	SubmitTimeout   time.Duration
 	RetrieveTimeout time.Duration
-	Logger          log.Logger
 }
 
 // NewDAClient returns a new DA client.
-func NewDAClient(da goDA.DA, gasPrice, gasMultiplier float64, hns goDA.Namespace, dns goDA.Namespace, logger log.Logger) *DAClient {
+func NewDAClient(da goDA.DA, gasPrice, gasMultiplier float64, ns goDA.Namespace) *DAClient {
+
 	return &DAClient{
 		DA:              da,
 		GasPrice:        gasPrice,
 		GasMultiplier:   gasMultiplier,
-		HeaderNamespace: hns,
-		DataNamespace:   dns,
+		Namespace:       ns,
 		SubmitTimeout:   defaultSubmitTimeout,
 		RetrieveTimeout: defaultRetrieveTimeout,
-		Logger:          logger,
 	}
 }
 
-// SubmitBlockData submits block data to DA.
+// SubmitBatch submits block data to DA.
 func (dac *DAClient) SubmitBatch(ctx context.Context, data []*sequencing.Batch, maxBlobSize uint64, gasPrice float64) ResultSubmitBatch {
 	var (
 		blobs    [][]byte
@@ -134,12 +134,12 @@ func (dac *DAClient) SubmitBatch(ctx context.Context, data []*sequencing.Batch, 
 		blob, err := data[i].Marshal()
 		if err != nil {
 			message = fmt.Sprint("failed to serialize block", err)
-			dac.Logger.Info(message)
+			log.Info(message)
 			break
 		}
 		if blobSize+uint64(len(blob)) > maxBlobSize {
 			message = fmt.Sprint(ErrBlobSizeOverLimit.Error(), "blob size limit reached", "maxBlobSize", maxBlobSize, "index", i, "blobSize", blobSize, "len(blob)", len(blob))
-			dac.Logger.Info(message)
+			log.Info(message)
 			break
 		}
 		blobSize += uint64(len(blob))
@@ -156,7 +156,7 @@ func (dac *DAClient) SubmitBatch(ctx context.Context, data []*sequencing.Batch, 
 
 	ctx, cancel := context.WithTimeout(ctx, dac.SubmitTimeout)
 	defer cancel()
-	ids, err := dac.DA.Submit(ctx, blobs, gasPrice, dac.DataNamespace)
+	ids, err := dac.DA.Submit(ctx, blobs, gasPrice, dac.Namespace)
 	if err != nil {
 		status := StatusError
 		switch {
@@ -198,9 +198,9 @@ func (dac *DAClient) SubmitBatch(ctx context.Context, data []*sequencing.Batch, 
 	}
 }
 
-// RetrieveBlockData retrieves block data from DA.
-func (dac *DAClient) RetrieveBlockData(ctx context.Context, dataLayerHeight uint64) ResultRetrieveBatch {
-	ids, err := dac.DA.GetIDs(ctx, dataLayerHeight, dac.DataNamespace)
+// RetrieveBatch retrieves block data from DA.
+func (dac *DAClient) RetrieveBatch(ctx context.Context, dataLayerHeight uint64) ResultRetrieveBatch {
+	ids, err := dac.DA.GetIDs(ctx, dataLayerHeight, dac.Namespace)
 	if err != nil {
 		return ResultRetrieveBatch{
 			BaseResult: BaseResult{
@@ -224,7 +224,7 @@ func (dac *DAClient) RetrieveBlockData(ctx context.Context, dataLayerHeight uint
 
 	ctx, cancel := context.WithTimeout(ctx, dac.RetrieveTimeout)
 	defer cancel()
-	blobs, err := dac.DA.Get(ctx, ids, dac.DataNamespace)
+	blobs, err := dac.DA.Get(ctx, ids, dac.Namespace)
 	if err != nil {
 		return ResultRetrieveBatch{
 			BaseResult: BaseResult{
@@ -240,7 +240,7 @@ func (dac *DAClient) RetrieveBlockData(ctx context.Context, dataLayerHeight uint
 		var d pb.Data
 		err = proto.Unmarshal(blob, &d)
 		if err != nil {
-			dac.Logger.Error("failed to unmarshal block data", "daHeight", dataLayerHeight, "position", i, "error", err)
+			log.Error("failed to unmarshal block data", "daHeight", dataLayerHeight, "position", i, "error", err)
 			continue
 		}
 		data[i] = new(types.Data)

@@ -6,6 +6,7 @@ toolchain go1.22.3
 
 require (
 	github.com/gogo/protobuf v1.3.2
+	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/rollkit/go-da v0.5.0
 	github.com/rollkit/go-sequencing v0.0.0-20240719145307-0166b8267e96
 	github.com/rollkit/rollkit v0.13.6
@@ -40,7 +41,6 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/ipfs/go-cid v0.4.1 // indirect
-	github.com/ipfs/go-log/v2 v2.5.1 // indirect
 	github.com/jmhodges/levigo v1.0.0 // indirect
 	github.com/klauspost/compress v1.17.8 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
