@@ -18,6 +18,7 @@ const (
 	defaultHost      = "localhost"
 	defaultPort      = "50051"
 	defaultBatchTime = time.Duration(2 * time.Second)
+	defaultDA        = "http://localhost:25568"
 )
 
 func main() {
@@ -26,15 +27,18 @@ func main() {
 		port          string
 		listenAll     bool
 		batchTime     time.Duration
+		da_address    string
 		da_namespace  string
 		da_auth_token string
 	)
-	flag.StringVar(&port, "port", defaultPort, "listening port")
-	flag.StringVar(&host, "host", defaultHost, "listening address")
+	flag.StringVar(&host, "host", defaultHost, "centralized sequencer host")
+	flag.StringVar(&port, "port", defaultPort, "centralized sequencer port")
+	flag.BoolVar(&listenAll, "listen-all", false, "listen on all network interfaces (0.0.0.0) instead of just localhost")
 	flag.DurationVar(&batchTime, "batch-time", defaultBatchTime, "time in seconds to wait before generating a new batch")
+	flag.StringVar(&da_address, "da_address", defaultDA, "DA address")
 	flag.StringVar(&da_namespace, "da_namespace", "", "DA namespace where the sequencer submits transactions")
 	flag.StringVar(&da_auth_token, "da_auth_token", "", "auth token for the DA")
-	flag.BoolVar(&listenAll, "listen-all", false, "listen on all network interfaces (0.0.0.0) instead of just localhost")
+
 	flag.Parse()
 
 	if listenAll {
@@ -47,7 +51,7 @@ func main() {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	centralizedSeq, err := sequencing.NewSequencer(address, da_auth_token, da_namespace, batchTime)
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, da_namespace, batchTime)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}

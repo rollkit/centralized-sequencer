@@ -7,6 +7,12 @@ pkgs := $(shell go list ./...)
 run := .
 count := 1
 
+## build: Build centralized-sequencer binary.
+build:
+	@echo "--> Building centralized-sequencer"
+	@go build -o build/ ${LDFLAGS} ./...
+.PHONY: build
+
 ## help: Show this help message
 help: Makefile
 	@echo " Choose a command run in "$(PROJECTNAME)":"
