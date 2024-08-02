@@ -307,6 +307,10 @@ func (c *Sequencer) GetNextBatch(ctx context.Context, lastBatch *sequencing.Batc
 	}
 
 	batch := c.bq.Next()
+	if batch == nil {
+		return nil, nil
+	}
+
 	batchBytes, err := batch.Marshal()
 	if err != nil {
 		return nil, err
