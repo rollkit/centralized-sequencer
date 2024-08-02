@@ -289,19 +289,31 @@ func (c *Sequencer) SubmitRollupTransaction(ctx context.Context, rollupId []byte
 }
 
 // GetNextBatch implements sequencing.Sequencer.
-func (c *Sequencer) GetNextBatch(ctx context.Context, lastBatch sequencing.Batch) (sequencing.Batch, error) {
+func (c *Sequencer) GetNextBatch(ctx context.Context, lastBatch *sequencing.Batch) (*sequencing.Batch, error) {
+	// check the lastBatchHash to match the hash of the supplied lastBatch
+	if lastBatch == nil && c.lastBatchHash != nil {
+		return nil, errors.New("lastBatch is not supposed to be nil")
+	}
+	lastBatchBytes, err := lastBatch.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	lastBatchHash := hashSHA256(lastBatchBytes)
+	if !bytes.Equal(c.lastBatchHash, lastBatchHash) {
+		return nil, errors.New("supplied lastBatch does not match with sequencer last batch")
+	}
 	batch := c.bq.Next()
 	batchBytes, err := batch.Marshal()
 	if err != nil {
-		return sequencing.Batch{}, err
+		return nil, err
 	}
 	c.lastBatchHash = hashSHA256(batchBytes)
 	c.seenBatches[string(c.lastBatchHash)] = struct{}{}
-	return *batch, nil
+	return batch, nil
 }
 
 // VerifyBatch implements sequencing.Sequencer.
-func (c *Sequencer) VerifyBatch(ctx context.Context, batch sequencing.Batch) (bool, error) {
+func (c *Sequencer) VerifyBatch(ctx context.Context, batch *sequencing.Batch) (bool, error) {
 	//TODO: need to add DA verification
 	batchBytes, err := batch.Marshal()
 	if err != nil {
