@@ -18,7 +18,7 @@ require (
 	github.com/celestiaorg/go-header v0.6.2 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cometbft/cometbft v0.38.7 // indirect
+	github.com/cometbft/cometbft v0.38.8 // indirect
 	github.com/cometbft/cometbft-db v0.8.0 // indirect
 	github.com/cosmos/gogoproto v1.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
