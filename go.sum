@@ -316,8 +316,8 @@ github.com/rogpeppe/go-internal v1.11.0 h1:cWPaGQEPrBb5/AsnsZesgZZ9yb1OQ+GOISoDN
 github.com/rogpeppe/go-internal v1.11.0/go.mod h1:ddIwULY96R17DhadqLgMfk9H9tvdUzkipdSkR5nkCZA=
 github.com/rollkit/go-da v0.5.0 h1:sQpZricNS+2TLx3HMjNWhtRfqtvVC/U4pWHpfUz3eN4=
 github.com/rollkit/go-da v0.5.0/go.mod h1:VsUeAoPvKl4Y8wWguu/VibscYiFFePkkrvZWyTjZHww=
-github.com/rollkit/go-sequencing v0.0.0-20240802060839-c195453f5eac h1:tawGnkr4zMiGQDPlFOZupsw1HzGbbT9dHQNUcXyRmW4=
-github.com/rollkit/go-sequencing v0.0.0-20240802060839-c195453f5eac/go.mod h1:J6E6NR7tNJ0cKBxtVHnby0hQ+S7RTayuDfG1Llwv800=
+github.com/rollkit/go-sequencing v0.0.0-20240808071855-4a58a773eb07 h1:R4Zd8TDsy4TbJHL0cnZPCEk7QEx7Rltgu3M+DiUVY6E=
+github.com/rollkit/go-sequencing v0.0.0-20240808071855-4a58a773eb07/go.mod h1:J6E6NR7tNJ0cKBxtVHnby0hQ+S7RTayuDfG1Llwv800=
 github.com/rollkit/rollkit v0.13.6 h1:ZdIBG5D5RuQvnnJSY8s3m46dR3A3F6jHN+01zX+Avt0=
 github.com/rollkit/rollkit v0.13.6/go.mod h1:clM4aPsWDJk/IN/SqCBsA+ab0/8gdh+5O4hRkLWKB7s=
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=

@@ -8,7 +8,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/rollkit/go-da v0.5.0
-	github.com/rollkit/go-sequencing v0.0.0-20240802060839-c195453f5eac
+	github.com/rollkit/go-sequencing v0.0.0-20240808071855-4a58a773eb07
 	github.com/rollkit/rollkit v0.13.6
 )
 
