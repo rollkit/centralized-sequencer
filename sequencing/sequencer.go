@@ -51,7 +51,7 @@ func (bq *BatchQueue) AddBatch(batch sequencing.Batch) {
 // Next ...
 func (bq *BatchQueue) Next() *sequencing.Batch {
 	if len(bq.queue) == 0 {
-		return nil
+		return &sequencing.Batch{Transactions: nil}
 	}
 	batch := bq.queue[0]
 	bq.queue = bq.queue[1:]
@@ -141,6 +141,7 @@ func NewSequencer(daAddress, daAuthToken, daNamespace string, batchTime time.Dur
 		maxDABlobSize: maxBlobSize,
 		tq:            NewTransactionQueue(),
 		bq:            NewBatchQueue(),
+		seenBatches:   make(map[string]struct{}),
 	}
 	go s.batchSubmissionLoop(s.ctx)
 	return s, nil
@@ -291,10 +292,10 @@ func (c *Sequencer) SubmitRollupTransaction(ctx context.Context, rollupId []byte
 // GetNextBatch implements sequencing.Sequencer.
 func (c *Sequencer) GetNextBatch(ctx context.Context, lastBatch *sequencing.Batch) (*sequencing.Batch, error) {
 	if c.lastBatchHash == nil {
-		if lastBatch != nil {
+		if lastBatch.Transactions != nil {
 			return nil, errors.New("lastBatch is supposed to be nil")
 		}
-	} else if lastBatch == nil {
+	} else if lastBatch.Transactions == nil {
 		return nil, errors.New("lastBatch is not supposed to be nil")
 	} else {
 		lastBatchBytes, err := lastBatch.Marshal()
@@ -307,8 +308,8 @@ func (c *Sequencer) GetNextBatch(ctx context.Context, lastBatch *sequencing.Batc
 	}
 
 	batch := c.bq.Next()
-	if batch == nil {
-		return nil, nil
+	if batch.Transactions == nil {
+		return batch, nil
 	}
 
 	batchBytes, err := batch.Marshal()
