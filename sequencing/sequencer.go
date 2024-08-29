@@ -85,6 +85,9 @@ func (tq *TransactionQueue) GetNextBatch(max uint64) sequencing.Batch {
 
 	var batch [][]byte
 	batchSize := len(tq.queue)
+	if batchSize == 0 {
+		return sequencing.Batch{Transactions: nil}
+	}
 	for {
 		batch = tq.queue[:batchSize]
 		blobSize := totalBytes(batch)
@@ -123,7 +126,7 @@ type Sequencer struct {
 }
 
 // NewSequencer ...
-func NewSequencer(daAddress, daAuthToken, daNamespace string, batchTime time.Duration) (*Sequencer, error) {
+func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime time.Duration) (*Sequencer, error) {
 	ctx := context.Background()
 	dac, err := proxyda.NewClient(daAddress, daAuthToken)
 	if err != nil {
@@ -168,6 +171,9 @@ func (c *Sequencer) batchSubmissionLoop(ctx context.Context) {
 
 func (c *Sequencer) publishBatch() error {
 	batch := c.tq.GetNextBatch(c.maxDABlobSize)
+	if batch.Transactions == nil {
+		return nil
+	}
 	err := c.submitBatchToDA(batch)
 	if err != nil {
 		return err

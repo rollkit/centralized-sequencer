@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -18,7 +19,7 @@ const (
 	defaultHost      = "localhost"
 	defaultPort      = "50051"
 	defaultBatchTime = time.Duration(2 * time.Second)
-	defaultDA        = "http://localhost:25568"
+	defaultDA        = "http://localhost:26658"
 )
 
 func main() {
@@ -51,7 +52,13 @@ func main() {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, da_namespace, batchTime)
+	namespace := make([]byte, len(da_namespace)/2)
+	_, err = hex.Decode(namespace, []byte(da_namespace))
+	if err != nil {
+		log.Fatalf("Error decoding namespace: %v", err)
+	}
+
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}

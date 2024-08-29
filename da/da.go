@@ -112,7 +112,6 @@ type DAClient struct {
 
 // NewDAClient returns a new DA client.
 func NewDAClient(da goDA.DA, gasPrice, gasMultiplier float64, ns goDA.Namespace) *DAClient {
-
 	return &DAClient{
 		DA:              da,
 		GasPrice:        gasPrice,
