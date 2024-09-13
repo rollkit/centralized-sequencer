@@ -296,46 +296,38 @@ func (c *Sequencer) SubmitRollupTransaction(ctx context.Context, rollupId []byte
 }
 
 // GetNextBatch implements sequencing.Sequencer.
-func (c *Sequencer) GetNextBatch(ctx context.Context, lastBatch *sequencing.Batch) (*sequencing.Batch, error) {
+func (c *Sequencer) GetNextBatch(ctx context.Context, lastBatchHash sequencing.Hash) (*sequencing.Batch, time.Time, error) {
+	now := time.Now()
 	if c.lastBatchHash == nil {
-		if lastBatch.Transactions != nil {
-			return nil, errors.New("lastBatch is supposed to be nil")
+		if lastBatchHash != nil {
+			return nil, now, errors.New("lastBatch is supposed to be nil")
 		}
-	} else if lastBatch.Transactions == nil {
-		return nil, errors.New("lastBatch is not supposed to be nil")
+	} else if lastBatchHash == nil {
+		return nil, now, errors.New("lastBatch is not supposed to be nil")
 	} else {
-		lastBatchBytes, err := lastBatch.Marshal()
-		if err != nil {
-			return nil, err
-		}
-		if !bytes.Equal(c.lastBatchHash, hashSHA256(lastBatchBytes)) {
-			return nil, errors.New("supplied lastBatch does not match with sequencer last batch")
+		if !bytes.Equal(c.lastBatchHash, lastBatchHash) {
+			return nil, now, errors.New("supplied lastBatch does not match with sequencer last batch")
 		}
 	}
 
 	batch := c.bq.Next()
 	if batch.Transactions == nil {
-		return batch, nil
+		return batch, now, nil
 	}
 
 	batchBytes, err := batch.Marshal()
 	if err != nil {
-		return nil, err
+		return nil, now, err
 	}
 
 	c.lastBatchHash = hashSHA256(batchBytes)
 	c.seenBatches[string(c.lastBatchHash)] = struct{}{}
-	return batch, nil
+	return batch, now, nil
 }
 
 // VerifyBatch implements sequencing.Sequencer.
-func (c *Sequencer) VerifyBatch(ctx context.Context, batch *sequencing.Batch) (bool, error) {
+func (c *Sequencer) VerifyBatch(ctx context.Context, batchHash sequencing.Hash) (bool, error) {
 	//TODO: need to add DA verification
-	batchBytes, err := batch.Marshal()
-	if err != nil {
-		return false, err
-	}
-	hash := hashSHA256(batchBytes)
-	_, ok := c.seenBatches[string(hash)]
+	_, ok := c.seenBatches[string(batchHash)]
 	return ok, nil
 }
