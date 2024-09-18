@@ -10,6 +10,7 @@ require (
 	github.com/rollkit/go-da v0.5.0
 	github.com/rollkit/go-sequencing v0.0.0-20240906080441-430ed2125493
 	github.com/rollkit/rollkit v0.13.6
+	github.com/stretchr/testify v1.9.0
 )
 
 require (
@@ -71,7 +72,6 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.1 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
-	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
 	go.etcd.io/bbolt v1.3.7 // indirect
 	go.opencensus.io v0.24.0 // indirect

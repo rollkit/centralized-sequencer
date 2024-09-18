@@ -29,19 +29,22 @@ make build
 
 ## Usage
 
-centralized-sequencer exposes a gRPC service that can be used with any gRPC client to
-sequence rollup transactions to the celestia network.
+centralized-sequencer exposes a gRPC service that can be used with any gRPC
+client to sequence rollup transactions to the celestia network.
 
 ## Example
 
 Run centralized-sequencer by specifying DA network details:
 
+<!-- markdownlint-disable MD013 -->
 ```sh
     ./build/centralized-sequencer -da_address <da_address> -da_auth_token <da_auth_token> -da_namespace $(openssl rand -hex 10)
 ```
+<!-- markdownlint-enable MD013 -->
 
 ## Flags
 
+<!-- markdownlint-disable MD013 -->
 | Flag                         | Usage                                   | Default                     |
 | ---------------------------- |-----------------------------------------|-----------------------------|
 | `batch-time`            | time in seconds to wait before generating a new batch | 2 seconds |
@@ -51,6 +54,7 @@ Run centralized-sequencer by specifying DA network details:
 | `host`                | centralized sequencer host            | localhost |
 | `port`             | centralized sequencer port | 50051 |
 | `listen-all` |listen on all network interfaces (0.0.0.0) instead of just localhost|disabled|
+<!-- markdownlint-enable MD013 -->
 
 See `./build/centralized-sequencer --help` for details.
 
@@ -83,8 +87,8 @@ We welcome your contributions! Everyone is welcome to contribute, whether it's
 in the form of code, documentation, bug reports, feature
 requests, or anything else.
 
-If you're looking for issues to work on, try looking at the
-[good first issue list](https://github.com/rollkit/centralized-sequencer/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+If you're looking for issues to work on, try looking at the [good first issue
+list](https://github.com/rollkit/centralized-sequencer/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 Issues with this tag are suitable for a new external contributor and is a great
 way to find something you can help with!
 
