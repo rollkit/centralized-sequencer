@@ -7,7 +7,7 @@ toolchain go1.22.3
 require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/ipfs/go-log/v2 v2.5.1
-	github.com/rollkit/go-da v0.5.0
+	github.com/rollkit/go-da v0.6.0
 	github.com/rollkit/go-sequencing v0.0.0-20240906080441-430ed2125493
 	github.com/rollkit/rollkit v0.13.6
 	github.com/stretchr/testify v1.9.0
@@ -28,7 +28,7 @@ require (
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/filecoin-project/go-jsonrpc v0.3.1 // indirect
+	github.com/filecoin-project/go-jsonrpc v0.6.0 // indirect
 	github.com/go-kit/kit v0.13.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
