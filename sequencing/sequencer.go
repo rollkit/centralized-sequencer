@@ -132,7 +132,7 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 	if err != nil {
 		return nil, fmt.Errorf("error while establishing connection to DA layer: %w", err)
 	}
-	dalc := da.NewDAClient(dac, -1, 0, goda.Namespace(daNamespace))
+	dalc := da.NewDAClient(dac, -1, 0, goda.Namespace(daNamespace)) // nolint:unconvert
 	maxBlobSize, err := dalc.DA.MaxBlobSize(ctx)
 	if err != nil {
 		return nil, err

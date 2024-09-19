@@ -18,7 +18,7 @@ import (
 const (
 	defaultHost      = "localhost"
 	defaultPort      = "50051"
-	defaultBatchTime = time.Duration(2 * time.Second)
+	defaultBatchTime = 2 * time.Second
 	defaultDA        = "http://localhost:26658"
 )
 
