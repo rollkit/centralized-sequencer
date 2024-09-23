@@ -123,6 +123,8 @@ type Sequencer struct {
 
 	seenBatches map[string]struct{}
 	bq          *BatchQueue
+
+	metrics *Metrics
 }
 
 // NewSequencer ...
@@ -180,6 +182,14 @@ func (c *Sequencer) publishBatch() error {
 	}
 	c.bq.AddBatch(batch)
 	return nil
+}
+
+func (c *Sequencer) recordMetrics(gasPrice float64, blobSize uint64, status da.StatusCode, numPendingBlocks int, includedBlockHeight uint64) {
+	c.metrics.GasPrice.Set(float64(gasPrice))
+	c.metrics.LastBlobSize.Set(float64(blobSize))
+	c.metrics.TransactionStatus.Set(float64(status))
+	c.metrics.NumPendingBlocks.Set(float64(numPendingBlocks))
+	c.metrics.IncludedBlockHeight.Set(float64(includedBlockHeight))
 }
 
 func (c *Sequencer) submitBatchToDA(batch sequencing.Batch) error {
@@ -243,6 +253,7 @@ daSubmitRetryLoop:
 			backoff = c.exponentialBackoff(backoff)
 		}
 
+		c.recordMetrics(gasPrice, res.BlobSize, res.Code, len(batchesToSubmit), res.DAHeight)
 		attempt += 1
 	}
 
