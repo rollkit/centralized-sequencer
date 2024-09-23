@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/rollkit/centralized-sequencer/sequencing"
 	sequencingGRPC "github.com/rollkit/go-sequencing/proxy/grpc"
@@ -32,6 +35,8 @@ func main() {
 		da_namespace  string
 		da_auth_token string
 		db_path       string
+		metricsEnabled bool
+		metricsAddress string
 	)
 	flag.StringVar(&host, "host", defaultHost, "centralized sequencer host")
 	flag.StringVar(&port, "port", defaultPort, "centralized sequencer port")
@@ -41,6 +46,8 @@ func main() {
 	flag.StringVar(&da_namespace, "da_namespace", "", "DA namespace where the sequencer submits transactions")
 	flag.StringVar(&da_auth_token, "da_auth_token", "", "auth token for the DA")
 	flag.StringVar(&db_path, "db_path", "", "path to the database")
+	flag.BoolVar(&metricsEnabled, "metrics", false, "Enable Prometheus metrics")
+	flag.StringVar(&metricsAddress, "metrics-address", ":8080", "Address to expose Prometheus metrics")
 
 	flag.Parse()
 
@@ -60,7 +67,19 @@ func main() {
 		log.Fatalf("Error decoding namespace: %v", err)
 	}
 
-	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, db_path)
+	if metricsEnabled {
+		go func() {
+			log.Printf("Starting metrics server on %v...\n", metricsAddress)
+			http.Handle("/metrics", promhttp.Handler())
+			err := http.ListenAndServe(metricsAddress, nil) // #nosec G114
+			if err != nil {
+				log.Fatalf("Failed to serve metrics: %v", err)
+			}
+		}()
+	}
+
+	metrics := sequencing.DefaultMetricsProvider(metricsEnabled)
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, metrics(""), db_path)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}
