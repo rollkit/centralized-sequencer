@@ -13,6 +13,20 @@ const (
 	MetricsSubsystem = "sequencer"
 )
 
+// MetricsProvider returns sequencing Metrics.
+type MetricsProvider func(chainID string) *Metrics
+
+// DefaultMetricsProvider returns Metrics build using Prometheus client library
+// if Prometheus is enabled. Otherwise, it returns no-op Metrics.
+func DefaultMetricsProvider(enabled bool, namespace string) MetricsProvider {
+	return func(chainID string) *Metrics {
+		if enabled {
+			return PrometheusMetrics(namespace, "chain_id", chainID)
+		}
+		return NopMetrics()
+	}
+}
+
 // Metrics contains metrics exposed by this package.
 type Metrics struct {
 	// GasPrice
