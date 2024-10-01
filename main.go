@@ -66,6 +66,7 @@ func main() {
 
 	if metricsEnabled {
 		go func() {
+			log.Printf("Starting metrics server on %v...\n", metricsAddress)
 			err := http.ListenAndServe(metricsAddress, nil)
 			if err != nil {
 				log.Fatalf("Failed to serve metrics: %v", err)
