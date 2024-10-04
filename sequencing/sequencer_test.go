@@ -3,11 +3,13 @@ package sequencing
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"net/url"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/dgraph-io/badger/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -52,8 +54,12 @@ func TestNewSequencer(t *testing.T) {
 	// mockDAClient := new(da.DAClient)
 
 	// Create a new sequencer with mock DA client
-	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), 10*time.Second)
+	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), 10*time.Second, "")
 	require.NoError(t, err)
+	defer func() {
+		err := seq.Close()
+		require.NoError(t, err)
+	}()
 
 	// Check if the sequencer was created with the correct values
 	assert.NotNil(t, seq)
@@ -64,8 +70,12 @@ func TestNewSequencer(t *testing.T) {
 
 func TestSequencer_SubmitRollupTransaction(t *testing.T) {
 	// Initialize a new sequencer
-	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("rollup1"), 10*time.Second)
+	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("rollup1"), 10*time.Second, "")
 	require.NoError(t, err)
+	defer func() {
+		err := seq.Close()
+		require.NoError(t, err)
+	}()
 
 	// Test with initial rollup ID
 	rollupId := []byte("rollup1")
@@ -76,7 +86,7 @@ func TestSequencer_SubmitRollupTransaction(t *testing.T) {
 	require.NotNil(t, res)
 
 	// Verify the transaction was added
-	assert.Equal(t, 1, len(seq.tq.GetNextBatch(1000).Transactions))
+	assert.Equal(t, 1, len(seq.tq.GetNextBatch(1000, seq.db).Transactions))
 
 	// Test with a different rollup ID (expecting an error due to mismatch)
 	res, err = seq.SubmitRollupTransaction(context.Background(), sequencing.SubmitRollupTransactionRequest{RollupId: []byte("rollup2"), Tx: tx})
@@ -91,6 +101,10 @@ func TestSequencer_GetNextBatch_NoLastBatch(t *testing.T) {
 		seenBatches: make(map[string]struct{}),
 		rollupId:    []byte("rollup"),
 	}
+	defer func() {
+		err := seq.Close()
+		require.NoError(t, err)
+	}()
 
 	// Test case where lastBatchHash and seq.lastBatchHash are both nil
 	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: nil})
@@ -107,6 +121,10 @@ func TestSequencer_GetNextBatch_LastBatchMismatch(t *testing.T) {
 		seenBatches:   make(map[string]struct{}),
 		rollupId:      []byte("rollup"),
 	}
+	defer func() {
+		err := seq.Close()
+		require.NoError(t, err)
+	}()
 
 	// Test case where lastBatchHash does not match seq.lastBatchHash
 	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: []byte("differentHash")})
@@ -122,6 +140,10 @@ func TestSequencer_GetNextBatch_LastBatchNilMismatch(t *testing.T) {
 		seenBatches:   make(map[string]struct{}),
 		rollupId:      []byte("rollup"),
 	}
+	defer func() {
+		err := seq.Close()
+		require.NoError(t, err)
+	}()
 
 	// Test case where lastBatchHash is nil but seq.lastBatchHash is not
 	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: nil})
@@ -129,19 +151,38 @@ func TestSequencer_GetNextBatch_LastBatchNilMismatch(t *testing.T) {
 	assert.Nil(t, res)
 }
 
+func getDB() (*badger.DB, error) {
+	dbPath := "test_db"
+	opts := badger.DefaultOptions(dbPath)
+	db, err := badger.Open(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open BadgerDB: %w", err)
+	}
+	return db, nil
+}
+
 func TestSequencer_GetNextBatch_Success(t *testing.T) {
 	// Initialize a new sequencer with a mock batch
 	mockBatch := &sequencing.Batch{Transactions: [][]byte{[]byte("tx1"), []byte("tx2")}}
+
+	db, err := getDB()
+	require.NoError(t, err)
 
 	seq := &Sequencer{
 		bq:            NewBatchQueue(),
 		seenBatches:   make(map[string]struct{}),
 		lastBatchHash: nil,
 		rollupId:      []byte("rollup"),
+		db:            db,
 	}
+	defer func() {
+		err := seq.Close()
+		require.NoError(t, err)
+	}()
 
 	// Add mock batch to the BatchQueue
-	seq.bq.AddBatch(*mockBatch)
+	err = seq.bq.AddBatch(*mockBatch, seq.db)
+	require.NoError(t, err)
 
 	// Test success case with no previous lastBatchHash
 	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: nil})
@@ -160,6 +201,10 @@ func TestSequencer_VerifyBatch(t *testing.T) {
 		seenBatches: make(map[string]struct{}),
 		rollupId:    []byte("rollup"),
 	}
+	defer func() {
+		err := seq.Close()
+		require.NoError(t, err)
+	}()
 
 	// Simulate adding a batch hash
 	batchHash := []byte("validHash")
