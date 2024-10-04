@@ -7,8 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -48,8 +46,8 @@ func NewBatchQueue() *BatchQueue {
 // AddBatch adds a new transaction to the queue
 func (bq *BatchQueue) AddBatch(batch sequencing.Batch, db *badger.DB) error {
 	bq.mu.Lock()
-	defer bq.mu.Unlock()
 	bq.queue = append(bq.queue, batch)
+	bq.mu.Unlock()
 
 	// Get the hash and bytes of the batch
 	h, err := batch.Hash()
@@ -72,6 +70,8 @@ func (bq *BatchQueue) AddBatch(batch sequencing.Batch, db *badger.DB) error {
 
 // Next extracts a batch of transactions from the queue
 func (bq *BatchQueue) Next(db *badger.DB) (*sequencing.Batch, error) {
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
 	if len(bq.queue) == 0 {
 		return &sequencing.Batch{Transactions: nil}, nil
 	}
@@ -163,8 +163,8 @@ func GetTransactionHash(txBytes []byte) string {
 // AddTransaction adds a new transaction to the queue
 func (tq *TransactionQueue) AddTransaction(tx sequencing.Tx, db *badger.DB) error {
 	tq.mu.Lock()
-	defer tq.mu.Unlock()
 	tq.queue = append(tq.queue, tx)
+	tq.mu.Unlock()
 
 	// Store transaction in BadgerDB
 	err := db.Update(func(txn *badger.Txn) error {
@@ -269,17 +269,6 @@ func totalBytes(data [][]byte) int {
 	return total
 }
 
-func getDefaultDBPath() (string, error) {
-	// Get user's home directory
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-
-	// Cross-platform default DB path
-	return filepath.Join(homeDir, "centralized-sequencer", "db"), nil
-}
-
 // Sequencer implements go-sequencing interface using celestia backend
 type Sequencer struct {
 	dalc      *da.DAClient
@@ -314,16 +303,14 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 		return nil, err
 	}
 
-	// Check db path
-	if dbPath == "" {
-		dbPath, err = getDefaultDBPath()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get default DB path: %w", err)
-		}
-	}
-
 	// Initialize BadgerDB
-	opts := badger.DefaultOptions(dbPath)
+	var opts badger.Options
+	if dbPath == "" {
+		opts = badger.DefaultOptions("").WithInMemory(true)
+	} else {
+		opts = badger.DefaultOptions(dbPath)
+	}
+	opts = opts.WithLogger(nil)
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open BadgerDB: %w", err)
@@ -337,7 +324,7 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 		tq:          NewTransactionQueue(),
 		bq:          NewBatchQueue(),
 		seenBatches: make(map[string]struct{}),
-		db:          db, // BadgerDB instance
+		db:          db,
 	}
 
 	// Load last batch hash from DB to recover from crash
@@ -369,7 +356,10 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 // Close safely closes the BadgerDB instance if it is open
 func (c *Sequencer) Close() error {
 	if c.db != nil {
-		return c.db.Close()
+		err := c.db.Close()
+		if err != nil {
+			return fmt.Errorf("failed to close BadgerDB: %w", err)
+		}
 	}
 	return nil
 }
@@ -397,6 +387,9 @@ func (c *Sequencer) LoadLastBatchHashFromDB() error {
 			// If no last batch hash exists, it's the first time or nothing was processed
 			c.lastBatchHash = nil
 			return nil
+		}
+		if err != nil {
+			return err
 		}
 		// Set lastBatchHash in memory from BadgerDB
 		return item.Value(func(val []byte) error {
@@ -591,7 +584,7 @@ func (c *Sequencer) SubmitRollupTransaction(ctx context.Context, req sequencing.
 	}
 	err := c.tq.AddTransaction(req.Tx, c.db)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to add transaction: %w", err)
 	}
 	return &sequencing.SubmitRollupTransactionResponse{}, nil
 }

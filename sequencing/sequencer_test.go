@@ -50,11 +50,8 @@ func startMockDAServJSONRPC(ctx context.Context, da_address string) (*proxy.Serv
 }
 
 func TestNewSequencer(t *testing.T) {
-	// Mock DA client
-	// mockDAClient := new(da.DAClient)
-
 	// Create a new sequencer with mock DA client
-	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), 10*time.Second, "")
+	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), 1*time.Second, "")
 	require.NoError(t, err)
 	defer func() {
 		err := seq.Close()
@@ -70,13 +67,12 @@ func TestNewSequencer(t *testing.T) {
 
 func TestSequencer_SubmitRollupTransaction(t *testing.T) {
 	// Initialize a new sequencer
-	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("rollup1"), 10*time.Second, "")
+	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("rollup1"), 1*time.Second, "")
 	require.NoError(t, err)
 	defer func() {
 		err := seq.Close()
 		require.NoError(t, err)
 	}()
-
 	// Test with initial rollup ID
 	rollupId := []byte("rollup1")
 	tx := []byte("transaction1")
@@ -96,10 +92,14 @@ func TestSequencer_SubmitRollupTransaction(t *testing.T) {
 
 func TestSequencer_GetNextBatch_NoLastBatch(t *testing.T) {
 	// Initialize a new sequencer
+	db, err := getDB()
+	require.NoError(t, err)
+
 	seq := &Sequencer{
 		bq:          NewBatchQueue(),
 		seenBatches: make(map[string]struct{}),
 		rollupId:    []byte("rollup"),
+		db:          db,
 	}
 	defer func() {
 		err := seq.Close()
@@ -114,12 +114,15 @@ func TestSequencer_GetNextBatch_NoLastBatch(t *testing.T) {
 }
 
 func TestSequencer_GetNextBatch_LastBatchMismatch(t *testing.T) {
+	db, err := getDB()
+	require.NoError(t, err)
 	// Initialize a new sequencer with a mock batch
 	seq := &Sequencer{
 		lastBatchHash: []byte("existingHash"),
 		bq:            NewBatchQueue(),
 		seenBatches:   make(map[string]struct{}),
 		rollupId:      []byte("rollup"),
+		db:            db,
 	}
 	defer func() {
 		err := seq.Close()
@@ -133,12 +136,16 @@ func TestSequencer_GetNextBatch_LastBatchMismatch(t *testing.T) {
 }
 
 func TestSequencer_GetNextBatch_LastBatchNilMismatch(t *testing.T) {
+	db, err := getDB()
+	require.NoError(t, err)
+
 	// Initialize a new sequencer
 	seq := &Sequencer{
 		lastBatchHash: []byte("existingHash"),
 		bq:            NewBatchQueue(),
 		seenBatches:   make(map[string]struct{}),
 		rollupId:      []byte("rollup"),
+		db:            db,
 	}
 	defer func() {
 		err := seq.Close()
@@ -152,8 +159,8 @@ func TestSequencer_GetNextBatch_LastBatchNilMismatch(t *testing.T) {
 }
 
 func getDB() (*badger.DB, error) {
-	dbPath := "test_db"
-	opts := badger.DefaultOptions(dbPath)
+	opts := badger.DefaultOptions("").WithInMemory(true)
+	opts = opts.WithLogger(nil)
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open BadgerDB: %w", err)
@@ -196,10 +203,13 @@ func TestSequencer_GetNextBatch_Success(t *testing.T) {
 }
 
 func TestSequencer_VerifyBatch(t *testing.T) {
+	db, err := getDB()
+	require.NoError(t, err)
 	// Initialize a new sequencer with a seen batch
 	seq := &Sequencer{
 		seenBatches: make(map[string]struct{}),
 		rollupId:    []byte("rollup"),
+		db:          db,
 	}
 	defer func() {
 		err := seq.Close()
