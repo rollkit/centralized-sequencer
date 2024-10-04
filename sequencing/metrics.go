@@ -56,31 +56,26 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 	}
 	return &Metrics{
 		GasPrice: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
 			Name:      "gas_price",
 			Help:      "The gas price of DA.",
 		}, labels).With(labelsAndValues...),
 		LastBlobSize: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
 			Name:      "last_blob_size",
 			Help:      "The size in bytes of the last DA blob.",
 		}, labels).With(labelsAndValues...),
 		TransactionStatus: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
 			Name:      "transaction_status",
 			Help:      "The transaction status of the last DA submission.",
 		}, labels).With(labelsAndValues...),
 		NumPendingBlocks: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
 			Name:      "num_pending_blocks",
 			Help:      "The number of pending blocks for DA submission.",
 		}, labels).With(labelsAndValues...),
 		IncludedBlockHeight: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
 			Name:      "included_block_height",
 			Help:      "The last DA included block height.",

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -126,11 +125,11 @@ type Sequencer struct {
 	bq          *BatchQueue
 
 	metricsProvider MetricsProvider
-	metrics *Metrics
+	metrics         *Metrics
 }
 
 // NewSequencer ...
-func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime time.Duration, metricsProvider MetricsProvider) (*Sequencer, error) {
+func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime time.Duration, metrics *Metrics) (*Sequencer, error) {
 	ctx := context.Background()
 	dac, err := proxyda.NewClient(daAddress, daAuthToken)
 	if err != nil {
@@ -149,8 +148,7 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 		tq:            NewTransactionQueue(),
 		bq:            NewBatchQueue(),
 		seenBatches:   make(map[string]struct{}),
-		metricsProvider: metricsProvider,
-		metrics: NopMetrics(), // Initialized from metricsProvider in SubmitRollupTransaction
+		metrics:       metrics,
 	}
 	go s.batchSubmissionLoop(s.ctx)
 	return s, nil
@@ -177,9 +175,6 @@ func (c *Sequencer) batchSubmissionLoop(ctx context.Context) {
 
 func (c *Sequencer) publishBatch() error {
 	batch := c.tq.GetNextBatch(c.maxDABlobSize)
-	if batch.Transactions == nil {
-		return nil
-	}
 	err := c.submitBatchToDA(batch)
 	if err != nil {
 		return err
@@ -301,7 +296,6 @@ func hashSHA256(data []byte) []byte {
 func (c *Sequencer) SubmitRollupTransaction(ctx context.Context, rollupId []byte, tx []byte) error {
 	if c.rollupId == nil {
 		c.rollupId = rollupId
-		c.metrics = c.metricsProvider(hex.EncodeToString(rollupId))
 	} else {
 		if !bytes.Equal(c.rollupId, rollupId) {
 			return ErrorRollupIdMismatch
