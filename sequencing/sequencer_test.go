@@ -2,6 +2,7 @@ package sequencing
 
 import (
 	"context"
+	"encoding/hex"
 	"net/url"
 	"os"
 	"testing"
@@ -63,22 +64,24 @@ func TestNewSequencer(t *testing.T) {
 
 func TestSequencer_SubmitRollupTransaction(t *testing.T) {
 	// Initialize a new sequencer
-	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), 10*time.Second)
+	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("rollup1"), 10*time.Second)
 	require.NoError(t, err)
 
 	// Test with initial rollup ID
 	rollupId := []byte("rollup1")
 	tx := []byte("transaction1")
 
-	err = seq.SubmitRollupTransaction(context.Background(), rollupId, tx)
+	res, err := seq.SubmitRollupTransaction(context.Background(), sequencing.SubmitRollupTransactionRequest{RollupId: rollupId, Tx: tx})
 	require.NoError(t, err)
+	require.NotNil(t, res)
 
 	// Verify the transaction was added
 	assert.Equal(t, 1, len(seq.tq.GetNextBatch(1000).Transactions))
 
 	// Test with a different rollup ID (expecting an error due to mismatch)
-	err = seq.SubmitRollupTransaction(context.Background(), []byte("rollup2"), tx)
-	assert.EqualError(t, err, ErrorRollupIdMismatch.Error())
+	res, err = seq.SubmitRollupTransaction(context.Background(), sequencing.SubmitRollupTransactionRequest{RollupId: []byte("rollup2"), Tx: tx})
+	assert.EqualError(t, err, ErrInvalidRollupId.Error())
+	assert.Nil(t, res)
 }
 
 func TestSequencer_GetNextBatch_NoLastBatch(t *testing.T) {
@@ -86,13 +89,14 @@ func TestSequencer_GetNextBatch_NoLastBatch(t *testing.T) {
 	seq := &Sequencer{
 		bq:          NewBatchQueue(),
 		seenBatches: make(map[string]struct{}),
+		rollupId:    []byte("rollup"),
 	}
 
 	// Test case where lastBatchHash and seq.lastBatchHash are both nil
-	batch, now, err := seq.GetNextBatch(context.Background(), nil)
+	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: nil})
 	require.NoError(t, err)
-	assert.Equal(t, time.Now().Day(), now.Day()) // Ensure the time is approximately the same
-	assert.Equal(t, 0, len(batch.Transactions))  // Should return an empty batch
+	assert.Equal(t, time.Now().Day(), res.Timestamp.Day()) // Ensure the time is approximately the same
+	assert.Equal(t, 0, len(res.Batch.Transactions))        // Should return an empty batch
 }
 
 func TestSequencer_GetNextBatch_LastBatchMismatch(t *testing.T) {
@@ -101,11 +105,13 @@ func TestSequencer_GetNextBatch_LastBatchMismatch(t *testing.T) {
 		lastBatchHash: []byte("existingHash"),
 		bq:            NewBatchQueue(),
 		seenBatches:   make(map[string]struct{}),
+		rollupId:      []byte("rollup"),
 	}
 
 	// Test case where lastBatchHash does not match seq.lastBatchHash
-	_, _, err := seq.GetNextBatch(context.Background(), []byte("differentHash"))
+	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: []byte("differentHash")})
 	assert.EqualError(t, err, "supplied lastBatch does not match with sequencer last batch")
+	assert.Nil(t, res)
 }
 
 func TestSequencer_GetNextBatch_LastBatchNilMismatch(t *testing.T) {
@@ -114,11 +120,13 @@ func TestSequencer_GetNextBatch_LastBatchNilMismatch(t *testing.T) {
 		lastBatchHash: []byte("existingHash"),
 		bq:            NewBatchQueue(),
 		seenBatches:   make(map[string]struct{}),
+		rollupId:      []byte("rollup"),
 	}
 
 	// Test case where lastBatchHash is nil but seq.lastBatchHash is not
-	_, _, err := seq.GetNextBatch(context.Background(), nil)
+	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: nil})
 	assert.EqualError(t, err, "lastBatch is not supposed to be nil")
+	assert.Nil(t, res)
 }
 
 func TestSequencer_GetNextBatch_Success(t *testing.T) {
@@ -129,16 +137,17 @@ func TestSequencer_GetNextBatch_Success(t *testing.T) {
 		bq:            NewBatchQueue(),
 		seenBatches:   make(map[string]struct{}),
 		lastBatchHash: nil,
+		rollupId:      []byte("rollup"),
 	}
 
 	// Add mock batch to the BatchQueue
 	seq.bq.AddBatch(*mockBatch)
 
 	// Test success case with no previous lastBatchHash
-	batch, now, err := seq.GetNextBatch(context.Background(), nil)
+	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: nil})
 	require.NoError(t, err)
-	assert.Equal(t, time.Now().Day(), now.Day()) // Ensure the time is approximately the same
-	assert.Equal(t, 2, len(batch.Transactions))  // Ensure that the transactions are present
+	assert.Equal(t, time.Now().Day(), res.Timestamp.Day()) // Ensure the time is approximately the same
+	assert.Equal(t, 2, len(res.Batch.Transactions))        // Ensure that the transactions are present
 
 	// Ensure lastBatchHash is updated after the batch
 	assert.NotNil(t, seq.lastBatchHash)
@@ -149,19 +158,20 @@ func TestSequencer_VerifyBatch(t *testing.T) {
 	// Initialize a new sequencer with a seen batch
 	seq := &Sequencer{
 		seenBatches: make(map[string]struct{}),
+		rollupId:    []byte("rollup"),
 	}
 
 	// Simulate adding a batch hash
 	batchHash := []byte("validHash")
-	seq.seenBatches[string(batchHash)] = struct{}{}
+	seq.seenBatches[hex.EncodeToString(batchHash)] = struct{}{}
 
 	// Test that VerifyBatch returns true for an existing batch
-	exists, err := seq.VerifyBatch(context.Background(), batchHash)
+	res, err := seq.VerifyBatch(context.Background(), sequencing.VerifyBatchRequest{RollupId: seq.rollupId, BatchHash: batchHash})
 	require.NoError(t, err)
-	assert.True(t, exists)
+	assert.True(t, res.Status)
 
 	// Test that VerifyBatch returns false for a non-existing batch
-	exists, err = seq.VerifyBatch(context.Background(), []byte("invalidHash"))
+	res, err = seq.VerifyBatch(context.Background(), sequencing.VerifyBatchRequest{RollupId: seq.rollupId, BatchHash: []byte("invalidHash")})
 	require.NoError(t, err)
-	assert.False(t, exists)
+	assert.False(t, res.Status)
 }

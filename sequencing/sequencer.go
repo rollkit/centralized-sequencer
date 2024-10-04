@@ -3,7 +3,7 @@ package sequencing
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -17,6 +17,9 @@ import (
 	"github.com/rollkit/go-sequencing"
 )
 
+// ErrInvalidRollupId is returned when the rollup id is invalid
+var ErrInvalidRollupId = errors.New("invalid rollup id")
+
 var _ sequencing.Sequencer = &Sequencer{}
 var log = logging.Logger("centralized-sequencer")
 
@@ -24,9 +27,6 @@ const maxSubmitAttempts = 30
 const defaultMempoolTTL = 25
 
 var initialBackoff = 100 * time.Millisecond
-
-// ErrorRollupIdMismatch is returned when the rollup id does not match
-var ErrorRollupIdMismatch = errors.New("rollup id mismatch")
 
 // BatchQueue ...
 type BatchQueue struct {
@@ -142,6 +142,7 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 		batchTime:     batchTime,
 		ctx:           ctx,
 		maxDABlobSize: maxBlobSize,
+		rollupId:      daNamespace,
 		tq:            NewTransactionQueue(),
 		bq:            NewBatchQueue(),
 		seenBatches:   make(map[string]struct{}),
@@ -277,57 +278,62 @@ func getRemainingSleep(start time.Time, blockTime time.Duration, sleep time.Dura
 	return remaining + sleep
 }
 
-func hashSHA256(data []byte) []byte {
-	hash := sha256.Sum256(data)
-	return hash[:]
-}
-
 // SubmitRollupTransaction implements sequencing.Sequencer.
-func (c *Sequencer) SubmitRollupTransaction(ctx context.Context, rollupId []byte, tx []byte) error {
-	if c.rollupId == nil {
-		c.rollupId = rollupId
-	} else {
-		if !bytes.Equal(c.rollupId, rollupId) {
-			return ErrorRollupIdMismatch
-		}
+func (c *Sequencer) SubmitRollupTransaction(ctx context.Context, req sequencing.SubmitRollupTransactionRequest) (*sequencing.SubmitRollupTransactionResponse, error) {
+	if !c.isValid(req.RollupId) {
+		return nil, ErrInvalidRollupId
 	}
-	c.tq.AddTransaction(tx)
-	return nil
+	c.tq.AddTransaction(req.Tx)
+	return &sequencing.SubmitRollupTransactionResponse{}, nil
 }
 
 // GetNextBatch implements sequencing.Sequencer.
-func (c *Sequencer) GetNextBatch(ctx context.Context, lastBatchHash sequencing.Hash) (*sequencing.Batch, time.Time, error) {
+func (c *Sequencer) GetNextBatch(ctx context.Context, req sequencing.GetNextBatchRequest) (*sequencing.GetNextBatchResponse, error) {
+	if !c.isValid(req.RollupId) {
+		return nil, ErrInvalidRollupId
+	}
 	now := time.Now()
 	if c.lastBatchHash == nil {
-		if lastBatchHash != nil {
-			return nil, now, errors.New("lastBatch is supposed to be nil")
+		if req.LastBatchHash != nil {
+			return nil, errors.New("lastBatch is supposed to be nil")
 		}
-	} else if lastBatchHash == nil {
-		return nil, now, errors.New("lastBatch is not supposed to be nil")
+	} else if req.LastBatchHash == nil {
+		return nil, errors.New("lastBatch is not supposed to be nil")
 	} else {
-		if !bytes.Equal(c.lastBatchHash, lastBatchHash) {
-			return nil, now, errors.New("supplied lastBatch does not match with sequencer last batch")
+		if !bytes.Equal(c.lastBatchHash, req.LastBatchHash) {
+			return nil, errors.New("supplied lastBatch does not match with sequencer last batch")
 		}
 	}
 
 	batch := c.bq.Next()
+	batchRes := &sequencing.GetNextBatchResponse{Batch: batch, Timestamp: now}
 	if batch.Transactions == nil {
-		return batch, now, nil
+		return batchRes, nil
 	}
 
-	batchBytes, err := batch.Marshal()
+	h, err := batch.Hash()
 	if err != nil {
-		return nil, now, err
+		return nil, err
 	}
 
-	c.lastBatchHash = hashSHA256(batchBytes)
-	c.seenBatches[string(c.lastBatchHash)] = struct{}{}
-	return batch, now, nil
+	c.lastBatchHash = h
+	c.seenBatches[hex.EncodeToString(h)] = struct{}{}
+	return batchRes, nil
 }
 
 // VerifyBatch implements sequencing.Sequencer.
-func (c *Sequencer) VerifyBatch(ctx context.Context, batchHash sequencing.Hash) (bool, error) {
+func (c *Sequencer) VerifyBatch(ctx context.Context, req sequencing.VerifyBatchRequest) (*sequencing.VerifyBatchResponse, error) {
 	//TODO: need to add DA verification
-	_, ok := c.seenBatches[string(batchHash)]
-	return ok, nil
+	if !c.isValid(req.RollupId) {
+		return nil, ErrInvalidRollupId
+	}
+	key := hex.EncodeToString(req.BatchHash)
+	if _, exists := c.seenBatches[key]; exists {
+		return &sequencing.VerifyBatchResponse{Status: true}, nil
+	}
+	return &sequencing.VerifyBatchResponse{Status: false}, nil
+}
+
+func (c *Sequencer) isValid(rollupId []byte) bool {
+	return bytes.Equal(c.rollupId, rollupId)
 }
