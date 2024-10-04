@@ -91,7 +91,7 @@ func (tq *TransactionQueue) GetNextBatch(max uint64) sequencing.Batch {
 	for {
 		batch = tq.queue[:batchSize]
 		blobSize := totalBytes(batch)
-		if uint64(blobSize) < max {
+		if uint64(blobSize) <= max {
 			break
 		}
 		batchSize = batchSize - 1
@@ -111,10 +111,10 @@ func totalBytes(data [][]byte) int {
 
 // Sequencer implements go-sequencing interface using celestia backend
 type Sequencer struct {
-	dalc          *da.DAClient
-	batchTime     time.Duration
-	ctx           context.Context
-	maxDABlobSize uint64
+	dalc      *da.DAClient
+	batchTime time.Duration
+	ctx       context.Context
+	maxSize   uint64
 
 	rollupId sequencing.RollupId
 
@@ -138,17 +138,26 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 		return nil, err
 	}
 	s := &Sequencer{
-		dalc:          dalc,
-		batchTime:     batchTime,
-		ctx:           ctx,
-		maxDABlobSize: maxBlobSize,
-		rollupId:      daNamespace,
-		tq:            NewTransactionQueue(),
-		bq:            NewBatchQueue(),
-		seenBatches:   make(map[string]struct{}),
+		dalc:        dalc,
+		batchTime:   batchTime,
+		ctx:         ctx,
+		maxSize:     maxBlobSize,
+		rollupId:    daNamespace,
+		tq:          NewTransactionQueue(),
+		bq:          NewBatchQueue(),
+		seenBatches: make(map[string]struct{}),
 	}
 	go s.batchSubmissionLoop(s.ctx)
 	return s, nil
+}
+
+// CompareAndSetMaxSize compares the passed size with the current max size and sets the max size to the smaller of the two
+// Initially the max size is set to the max blob size returned by the DA layer
+// This can be overwritten by the execution client if it can only handle smaller size
+func (c *Sequencer) CompareAndSetMaxSize(size uint64) {
+	if size < c.maxSize {
+		c.maxSize = size
+	}
 }
 
 func (c *Sequencer) batchSubmissionLoop(ctx context.Context) {
@@ -171,7 +180,7 @@ func (c *Sequencer) batchSubmissionLoop(ctx context.Context) {
 }
 
 func (c *Sequencer) publishBatch() error {
-	batch := c.tq.GetNextBatch(c.maxDABlobSize)
+	batch := c.tq.GetNextBatch(c.maxSize)
 	if batch.Transactions == nil {
 		return nil
 	}
@@ -190,7 +199,7 @@ func (c *Sequencer) submitBatchToDA(batch sequencing.Batch) error {
 	numSubmittedBatches := 0
 	attempt := 0
 
-	maxBlobSize := c.maxDABlobSize
+	maxBlobSize := c.maxSize
 	initialMaxBlobSize := maxBlobSize
 	initialGasPrice := c.dalc.GasPrice
 	gasPrice := c.dalc.GasPrice
@@ -303,6 +312,11 @@ func (c *Sequencer) GetNextBatch(ctx context.Context, req sequencing.GetNextBatc
 		if !bytes.Equal(c.lastBatchHash, req.LastBatchHash) {
 			return nil, errors.New("supplied lastBatch does not match with sequencer last batch")
 		}
+	}
+
+	// Set the max size if it is provided
+	if req.MaxBytes > 0 {
+		c.CompareAndSetMaxSize(req.MaxBytes)
 	}
 
 	batch := c.bq.Next()
