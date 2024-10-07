@@ -124,8 +124,7 @@ type Sequencer struct {
 	seenBatches map[string]struct{}
 	bq          *BatchQueue
 
-	metricsProvider MetricsProvider
-	metrics         *Metrics
+	metrics *Metrics
 }
 
 // NewSequencer ...

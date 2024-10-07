@@ -51,7 +51,7 @@ func TestNewSequencer(t *testing.T) {
 	// mockDAClient := new(da.DAClient)
 
 	// Create a new sequencer with mock DA client
-	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), 10*time.Second)
+	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), 10*time.Second, NopMetrics())
 	require.NoError(t, err)
 
 	// Check if the sequencer was created with the correct values
@@ -63,7 +63,7 @@ func TestNewSequencer(t *testing.T) {
 
 func TestSequencer_SubmitRollupTransaction(t *testing.T) {
 	// Initialize a new sequencer
-	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), 10*time.Second)
+	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), 10*time.Second, NopMetrics())
 	require.NoError(t, err)
 
 	// Test with initial rollup ID

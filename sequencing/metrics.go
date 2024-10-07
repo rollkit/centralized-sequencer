@@ -18,10 +18,10 @@ type MetricsProvider func(chainID string) *Metrics
 
 // DefaultMetricsProvider returns Metrics build using Prometheus client library
 // if Prometheus is enabled. Otherwise, it returns no-op Metrics.
-func DefaultMetricsProvider(enabled bool, namespace string) MetricsProvider {
+func DefaultMetricsProvider(enabled bool) MetricsProvider {
 	return func(chainID string) *Metrics {
 		if enabled {
-			return PrometheusMetrics(namespace, "chain_id", chainID)
+			return PrometheusMetrics("chain_id", chainID)
 		}
 		return NopMetrics()
 	}
@@ -49,7 +49,7 @@ type Metrics struct {
 // PrometheusMetrics returns Metrics build using Prometheus client library.
 // Optionally, labels can be provided along with their values ("foo",
 // "fooValue").
-func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
+func PrometheusMetrics(labelsAndValues ...string) *Metrics {
 	labels := []string{}
 	for i := 0; i < len(labelsAndValues); i += 2 {
 		labels = append(labels, labelsAndValues[i])

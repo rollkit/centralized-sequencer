@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/rollkit/centralized-sequencer/sequencing"
 	sequencingGRPC "github.com/rollkit/go-sequencing/proxy/grpc"
 )
@@ -68,15 +69,15 @@ func main() {
 		go func() {
 			log.Printf("Starting metrics server on %v...\n", metricsAddress)
 			http.Handle("/metrics", promhttp.Handler())
-			err := http.ListenAndServe(metricsAddress, nil)
+			err := http.ListenAndServe(metricsAddress, nil) // #nosec G114
 			if err != nil {
 				log.Fatalf("Failed to serve metrics: %v", err)
 			}
 		}()
 	}
 
-	metrics := sequencing.DefaultMetricsProvider(metricsEnabled, da_namespace)
-	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, metrics(""))
+	metrics := sequencing.DefaultMetricsProvider(metricsEnabled)("") // TODO use rollupId as chain_id
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, metrics)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}
