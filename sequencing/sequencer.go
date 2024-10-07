@@ -147,17 +147,8 @@ func NewTransactionQueue() *TransactionQueue {
 
 // GetTransactionHash to get hash from transaction bytes using SHA-256
 func GetTransactionHash(txBytes []byte) string {
-	// Create a new SHA-256 hasher
-	hasher := sha256.New()
-
-	// Write the transaction bytes into the hasher
-	hasher.Write(txBytes)
-
-	// Compute the hash (digest)
-	hashBytes := hasher.Sum(nil)
-
-	// Return the hash as a hexadecimal string
-	return hex.EncodeToString(hashBytes)
+	hashBytes := sha256.Sum256(txBytes)
+	return hex.EncodeToString(hashBytes[:])
 }
 
 // AddTransaction adds a new transaction to the queue
