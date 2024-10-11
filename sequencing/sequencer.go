@@ -123,10 +123,12 @@ type Sequencer struct {
 
 	seenBatches map[string]struct{}
 	bq          *BatchQueue
+
+	metrics *Metrics
 }
 
 // NewSequencer ...
-func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime time.Duration) (*Sequencer, error) {
+func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime time.Duration, metrics *Metrics) (*Sequencer, error) {
 	ctx := context.Background()
 	dac, err := proxyda.NewClient(daAddress, daAuthToken)
 	if err != nil {
@@ -145,6 +147,7 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 		tq:            NewTransactionQueue(),
 		bq:            NewBatchQueue(),
 		seenBatches:   make(map[string]struct{}),
+		metrics:       metrics,
 	}
 	go s.batchSubmissionLoop(s.ctx)
 	return s, nil
@@ -171,15 +174,20 @@ func (c *Sequencer) batchSubmissionLoop(ctx context.Context) {
 
 func (c *Sequencer) publishBatch() error {
 	batch := c.tq.GetNextBatch(c.maxDABlobSize)
-	if batch.Transactions == nil {
-		return nil
-	}
 	err := c.submitBatchToDA(batch)
 	if err != nil {
 		return err
 	}
 	c.bq.AddBatch(batch)
 	return nil
+}
+
+func (c *Sequencer) recordMetrics(gasPrice float64, blobSize uint64, status da.StatusCode, numPendingBlocks int, includedBlockHeight uint64) {
+	c.metrics.GasPrice.Set(float64(gasPrice))
+	c.metrics.LastBlobSize.Set(float64(blobSize))
+	c.metrics.TransactionStatus.Set(float64(status))
+	c.metrics.NumPendingBlocks.Set(float64(numPendingBlocks))
+	c.metrics.IncludedBlockHeight.Set(float64(includedBlockHeight))
 }
 
 func (c *Sequencer) submitBatchToDA(batch sequencing.Batch) error {
@@ -243,6 +251,7 @@ daSubmitRetryLoop:
 			backoff = c.exponentialBackoff(backoff)
 		}
 
+		c.recordMetrics(gasPrice, res.BlobSize, res.Code, len(batchesToSubmit), res.DAHeight)
 		attempt += 1
 	}
 

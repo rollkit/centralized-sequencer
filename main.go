@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/rollkit/centralized-sequencer/sequencing"
 	sequencingGRPC "github.com/rollkit/go-sequencing/proxy/grpc"
@@ -24,13 +27,15 @@ const (
 
 func main() {
 	var (
-		host          string
-		port          string
-		listenAll     bool
-		batchTime     time.Duration
-		da_address    string
-		da_namespace  string
-		da_auth_token string
+		host           string
+		port           string
+		listenAll      bool
+		batchTime      time.Duration
+		da_address     string
+		da_namespace   string
+		da_auth_token  string
+		metricsEnabled bool
+		metricsAddress string
 	)
 	flag.StringVar(&host, "host", defaultHost, "centralized sequencer host")
 	flag.StringVar(&port, "port", defaultPort, "centralized sequencer port")
@@ -39,6 +44,8 @@ func main() {
 	flag.StringVar(&da_address, "da_address", defaultDA, "DA address")
 	flag.StringVar(&da_namespace, "da_namespace", "", "DA namespace where the sequencer submits transactions")
 	flag.StringVar(&da_auth_token, "da_auth_token", "", "auth token for the DA")
+	flag.BoolVar(&metricsEnabled, "metrics", false, "Enable Prometheus metrics")
+	flag.StringVar(&metricsAddress, "metrics-address", ":8080", "Address to expose Prometheus metrics")
 
 	flag.Parse()
 
@@ -58,7 +65,19 @@ func main() {
 		log.Fatalf("Error decoding namespace: %v", err)
 	}
 
-	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime)
+	if metricsEnabled {
+		go func() {
+			log.Printf("Starting metrics server on %v...\n", metricsAddress)
+			http.Handle("/metrics", promhttp.Handler())
+			err := http.ListenAndServe(metricsAddress, nil) // #nosec G114
+			if err != nil {
+				log.Fatalf("Failed to serve metrics: %v", err)
+			}
+		}()
+	}
+
+	metrics := sequencing.DefaultMetricsProvider(metricsEnabled)("") // TODO use rollupId as chain_id
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, metrics)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}
