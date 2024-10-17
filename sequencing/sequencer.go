@@ -594,9 +594,9 @@ func (c *Sequencer) GetNextBatch(ctx context.Context, req sequencing.GetNextBatc
 		return nil, ErrInvalidRollupId
 	}
 	now := time.Now()
-	c.lastBatchHashMutex.RLock()
+	c.lastBatchHashMutex.Lock()
+	defer c.lastBatchHashMutex.Unlock()
 	lastBatchHash := c.lastBatchHash
-	c.lastBatchHashMutex.RUnlock()
 
 	if !reflect.DeepEqual(lastBatchHash, req.LastBatchHash) {
 		return nil, fmt.Errorf("batch hash mismatch: lastBatchHash = %x, req.LastBatchHash = %x", lastBatchHash, req.LastBatchHash)
@@ -622,9 +622,7 @@ func (c *Sequencer) GetNextBatch(ctx context.Context, req sequencing.GetNextBatc
 		return c.recover(*batch, err)
 	}
 
-	c.lastBatchHashMutex.Lock()
 	c.lastBatchHash = h
-	c.lastBatchHashMutex.Unlock()
 	err = c.setLastBatchHash(h)
 	if err != nil {
 		return c.recover(*batch, err)
