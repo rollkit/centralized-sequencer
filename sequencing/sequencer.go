@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger/v3"
@@ -359,8 +360,14 @@ func (c *Sequencer) Close() error {
 // Initially the max size is set to the max blob size returned by the DA layer
 // This can be overwritten by the execution client if it can only handle smaller size
 func (c *Sequencer) CompareAndSetMaxSize(size uint64) {
-	if size < c.maxSize {
-		c.maxSize = size
+	for {
+		current := atomic.LoadUint64(&c.maxSize)
+		if size >= current {
+			return
+		}
+		if atomic.CompareAndSwapUint64(&c.maxSize, current, size) {
+			return
+		}
 	}
 }
 
