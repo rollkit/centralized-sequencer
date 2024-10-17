@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/dgraph-io/badger/v3"
 	logging "github.com/ipfs/go-log/v2"
 
 	"github.com/rollkit/centralized-sequencer/da"
@@ -17,6 +21,9 @@ import (
 	"github.com/rollkit/go-sequencing"
 )
 
+// ErrInvalidRollupId is returned when the rollup id is invalid
+var ErrInvalidRollupId = errors.New("invalid rollup id")
+
 var _ sequencing.Sequencer = &Sequencer{}
 var log = logging.Logger("centralized-sequencer")
 
@@ -24,9 +31,6 @@ const maxSubmitAttempts = 30
 const defaultMempoolTTL = 25
 
 var initialBackoff = 100 * time.Millisecond
-
-// ErrorRollupIdMismatch is returned when the rollup id does not match
-var ErrorRollupIdMismatch = errors.New("rollup id mismatch")
 
 // BatchQueue ...
 type BatchQueue struct {
@@ -42,20 +46,92 @@ func NewBatchQueue() *BatchQueue {
 }
 
 // AddBatch adds a new transaction to the queue
-func (bq *BatchQueue) AddBatch(batch sequencing.Batch) {
+func (bq *BatchQueue) AddBatch(batch sequencing.Batch, db *badger.DB) error {
 	bq.mu.Lock()
-	defer bq.mu.Unlock()
 	bq.queue = append(bq.queue, batch)
+	bq.mu.Unlock()
+
+	// Get the hash and bytes of the batch
+	h, err := batch.Hash()
+	if err != nil {
+		return err
+	}
+
+	// Marshal the batch
+	batchBytes, err := batch.Marshal()
+	if err != nil {
+		return err
+	}
+
+	// Store the batch in BadgerDB
+	err = db.Update(func(txn *badger.Txn) error {
+		return txn.Set(h, batchBytes)
+	})
+	return err
 }
 
-// Next ...
-func (bq *BatchQueue) Next() *sequencing.Batch {
+// Next extracts a batch of transactions from the queue
+func (bq *BatchQueue) Next(db *badger.DB) (*sequencing.Batch, error) {
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
 	if len(bq.queue) == 0 {
-		return &sequencing.Batch{Transactions: nil}
+		return &sequencing.Batch{Transactions: nil}, nil
 	}
 	batch := bq.queue[0]
 	bq.queue = bq.queue[1:]
-	return &batch
+
+	h, err := batch.Hash()
+	if err != nil {
+		return &sequencing.Batch{Transactions: nil}, err
+	}
+
+	// Remove the batch from BadgerDB after processing
+	err = db.Update(func(txn *badger.Txn) error {
+		// Get the batch to ensure it exists in the DB before deleting
+		_, err := txn.Get(h)
+		if err != nil {
+			return err
+		}
+		// Delete the batch from BadgerDB
+		return txn.Delete(h)
+	})
+	if err != nil {
+		return &sequencing.Batch{Transactions: nil}, err
+	}
+
+	return &batch, nil
+}
+
+// LoadFromDB reloads all batches from BadgerDB into the in-memory queue after a crash or restart.
+func (bq *BatchQueue) LoadFromDB(db *badger.DB) error {
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
+
+	err := db.View(func(txn *badger.Txn) error {
+		// Create an iterator to go through all batches stored in BadgerDB
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				var batch sequencing.Batch
+				// Unmarshal the batch bytes and add them to the in-memory queue
+				err := batch.Unmarshal(val)
+				if err != nil {
+					return err
+				}
+				bq.queue = append(bq.queue, batch)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	return err
 }
 
 // TransactionQueue is a queue of transactions
@@ -71,15 +147,27 @@ func NewTransactionQueue() *TransactionQueue {
 	}
 }
 
+// GetTransactionHash to get hash from transaction bytes using SHA-256
+func GetTransactionHash(txBytes []byte) string {
+	hashBytes := sha256.Sum256(txBytes)
+	return hex.EncodeToString(hashBytes[:])
+}
+
 // AddTransaction adds a new transaction to the queue
-func (tq *TransactionQueue) AddTransaction(tx sequencing.Tx) {
+func (tq *TransactionQueue) AddTransaction(tx sequencing.Tx, db *badger.DB) error {
 	tq.mu.Lock()
-	defer tq.mu.Unlock()
 	tq.queue = append(tq.queue, tx)
+	tq.mu.Unlock()
+
+	// Store transaction in BadgerDB
+	err := db.Update(func(txn *badger.Txn) error {
+		return txn.Set([]byte(GetTransactionHash(tx)), tx)
+	})
+	return err
 }
 
 // GetNextBatch extracts a batch of transactions from the queue
-func (tq *TransactionQueue) GetNextBatch(max uint64) sequencing.Batch {
+func (tq *TransactionQueue) GetNextBatch(max uint64, db *badger.DB) sequencing.Batch {
 	tq.mu.Lock()
 	defer tq.mu.Unlock()
 
@@ -91,14 +179,79 @@ func (tq *TransactionQueue) GetNextBatch(max uint64) sequencing.Batch {
 	for {
 		batch = tq.queue[:batchSize]
 		blobSize := totalBytes(batch)
-		if uint64(blobSize) < max {
+		if uint64(blobSize) <= max {
 			break
 		}
 		batchSize = batchSize - 1
 	}
 
+	// Retrieve transactions from BadgerDB and remove processed ones
+	for _, tx := range batch {
+		txHash := GetTransactionHash(tx)
+		err := db.Update(func(txn *badger.Txn) error {
+			// Get and then delete the transaction from BadgerDB
+			_, err := txn.Get([]byte(txHash))
+			if err != nil {
+				return err
+			}
+			return txn.Delete([]byte(txHash)) // Remove processed transaction
+		})
+		if err != nil {
+			return sequencing.Batch{Transactions: nil} // Return empty batch if any transaction retrieval fails
+		}
+	}
 	tq.queue = tq.queue[batchSize:]
 	return sequencing.Batch{Transactions: batch}
+}
+
+// LoadFromDB reloads all transactions from BadgerDB into the in-memory queue after a crash.
+func (tq *TransactionQueue) LoadFromDB(db *badger.DB) error {
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+
+	// Start a read-only transaction
+	err := db.View(func(txn *badger.Txn) error {
+		// Create an iterator to go through all transactions stored in BadgerDB
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close() // Ensure that the iterator is properly closed
+
+		// Iterate through all items in the database
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			err := item.Value(func(val []byte) error {
+				// Load each transaction from DB and add to the in-memory queue
+				tq.queue = append(tq.queue, val)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	return err
+}
+
+// AddBatchBackToQueue re-adds the batch to the transaction queue (and BadgerDB) after a failure.
+func (tq *TransactionQueue) AddBatchBackToQueue(batch sequencing.Batch, db *badger.DB) error {
+	tq.mu.Lock()
+	defer tq.mu.Unlock()
+
+	// Add the batch back to the in-memory transaction queue
+	tq.queue = append(tq.queue, batch.Transactions...)
+
+	// Optionally, persist the batch back to BadgerDB
+	for _, tx := range batch.Transactions {
+		err := db.Update(func(txn *badger.Txn) error {
+			return txn.Set([]byte(GetTransactionHash(tx)), tx) // Store transaction back in DB
+		})
+		if err != nil {
+			return fmt.Errorf("failed to revert transaction to DB: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func totalBytes(data [][]byte) int {
@@ -111,22 +264,27 @@ func totalBytes(data [][]byte) int {
 
 // Sequencer implements go-sequencing interface using celestia backend
 type Sequencer struct {
-	dalc          *da.DAClient
-	batchTime     time.Duration
-	ctx           context.Context
-	maxDABlobSize uint64
+	dalc      *da.DAClient
+	batchTime time.Duration
+	ctx       context.Context
+	maxSize   uint64
 
 	rollupId sequencing.RollupId
 
-	tq            *TransactionQueue
-	lastBatchHash []byte
+	tq                 *TransactionQueue
+	lastBatchHash      []byte
+	lastBatchHashMutex sync.RWMutex
 
-	seenBatches map[string]struct{}
-	bq          *BatchQueue
+	seenBatches      map[string]struct{}
+	seenBatchesMutex sync.Mutex
+	bq               *BatchQueue
+
+	db    *badger.DB // BadgerDB instance for persistence
+	dbMux sync.Mutex // Mutex for safe concurrent DB access
 }
 
 // NewSequencer ...
-func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime time.Duration) (*Sequencer, error) {
+func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime time.Duration, dbPath string) (*Sequencer, error) {
 	ctx := context.Background()
 	dac, err := proxyda.NewClient(daAddress, daAuthToken)
 	if err != nil {
@@ -137,17 +295,150 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 	if err != nil {
 		return nil, err
 	}
-	s := &Sequencer{
-		dalc:          dalc,
-		batchTime:     batchTime,
-		ctx:           ctx,
-		maxDABlobSize: maxBlobSize,
-		tq:            NewTransactionQueue(),
-		bq:            NewBatchQueue(),
-		seenBatches:   make(map[string]struct{}),
+
+	// Initialize BadgerDB
+	var opts badger.Options
+	if dbPath == "" {
+		opts = badger.DefaultOptions("").WithInMemory(true)
+	} else {
+		opts = badger.DefaultOptions(dbPath)
 	}
+	opts = opts.WithLogger(nil)
+	db, err := badger.Open(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open BadgerDB: %w", err)
+	}
+	s := &Sequencer{
+		dalc:        dalc,
+		batchTime:   batchTime,
+		ctx:         ctx,
+		maxSize:     maxBlobSize,
+		rollupId:    daNamespace,
+		tq:          NewTransactionQueue(),
+		bq:          NewBatchQueue(),
+		seenBatches: make(map[string]struct{}),
+		db:          db,
+	}
+
+	// Load last batch hash from DB to recover from crash
+	err = s.LoadLastBatchHashFromDB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load last batch hash from DB: %w", err)
+	}
+
+	// Load seen batches from DB to recover from crash
+	err = s.LoadSeenBatchesFromDB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load seen batches from DB: %w", err)
+	}
+
+	// Load TransactionQueue and BatchQueue from DB to recover from crash
+	err = s.tq.LoadFromDB(s.db) // Load transactions
+	if err != nil {
+		return nil, fmt.Errorf("failed to load transaction queue from DB: %w", err)
+	}
+	err = s.bq.LoadFromDB(s.db) // Load batches
+	if err != nil {
+		return nil, fmt.Errorf("failed to load batch queue from DB: %w", err)
+	}
+
 	go s.batchSubmissionLoop(s.ctx)
 	return s, nil
+}
+
+// Close safely closes the BadgerDB instance if it is open
+func (c *Sequencer) Close() error {
+	if c.db != nil {
+		err := c.db.Close()
+		if err != nil {
+			return fmt.Errorf("failed to close BadgerDB: %w", err)
+		}
+	}
+	return nil
+}
+
+// CompareAndSetMaxSize compares the passed size with the current max size and sets the max size to the smaller of the two
+// Initially the max size is set to the max blob size returned by the DA layer
+// This can be overwritten by the execution client if it can only handle smaller size
+func (c *Sequencer) CompareAndSetMaxSize(size uint64) {
+	for {
+		current := atomic.LoadUint64(&c.maxSize)
+		if size >= current {
+			return
+		}
+		if atomic.CompareAndSwapUint64(&c.maxSize, current, size) {
+			return
+		}
+	}
+}
+
+// LoadLastBatchHashFromDB loads the last batch hash from BadgerDB into memory after a crash or restart.
+func (c *Sequencer) LoadLastBatchHashFromDB() error {
+	// Lock to ensure concurrency safety
+	c.dbMux.Lock()
+	defer c.dbMux.Unlock()
+
+	var hash []byte
+	// Load the last batch hash from BadgerDB if it exists
+	err := c.db.View(func(txn *badger.Txn) error {
+		item, err := txn.Get([]byte("lastBatchHash"))
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			// If no last batch hash exists, it's the first time or nothing was processed
+			c.lastBatchHash = nil
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		// Set lastBatchHash in memory from BadgerDB
+		return item.Value(func(val []byte) error {
+			hash = val
+			return nil
+		})
+	})
+	// Set the in-memory lastBatchHash after successfully loading it from DB
+	c.lastBatchHash = hash
+	return err
+}
+
+// LoadSeenBatchesFromDB loads the seen batches from BadgerDB into memory after a crash or restart.
+func (c *Sequencer) LoadSeenBatchesFromDB() error {
+	c.dbMux.Lock()
+	defer c.dbMux.Unlock()
+
+	err := c.db.View(func(txn *badger.Txn) error {
+		// Create an iterator to go through all entries in BadgerDB
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			key := item.Key()
+			// Add the batch hash to the seenBatches map (for fast in-memory lookups)
+			c.seenBatches[string(key)] = struct{}{}
+		}
+		return nil
+	})
+
+	return err
+}
+
+func (c *Sequencer) setLastBatchHash(hash []byte) error {
+	c.dbMux.Lock()
+	defer c.dbMux.Unlock()
+
+	return c.db.Update(func(txn *badger.Txn) error {
+		return txn.Set([]byte("lastBatchHash"), hash)
+	})
+}
+
+func (c *Sequencer) addSeenBatch(hash []byte) error {
+	c.dbMux.Lock()
+	defer c.dbMux.Unlock()
+
+	return c.db.Update(func(txn *badger.Txn) error {
+		return txn.Set(hash, []byte{1}) // Just to mark the batch as seen
+	})
 }
 
 func (c *Sequencer) batchSubmissionLoop(ctx context.Context) {
@@ -170,15 +461,23 @@ func (c *Sequencer) batchSubmissionLoop(ctx context.Context) {
 }
 
 func (c *Sequencer) publishBatch() error {
-	batch := c.tq.GetNextBatch(c.maxDABlobSize)
+	batch := c.tq.GetNextBatch(c.maxSize, c.db)
 	if batch.Transactions == nil {
 		return nil
 	}
 	err := c.submitBatchToDA(batch)
 	if err != nil {
+		// On failure, re-add the batch to the transaction queue for future retry
+		revertErr := c.tq.AddBatchBackToQueue(batch, c.db)
+		if revertErr != nil {
+			return fmt.Errorf("failed to revert batch to queue: %w", revertErr)
+		}
+		return fmt.Errorf("failed to submit batch to DA: %w", err)
+	}
+	err = c.bq.AddBatch(batch, c.db)
+	if err != nil {
 		return err
 	}
-	c.bq.AddBatch(batch)
 	return nil
 }
 
@@ -189,7 +488,7 @@ func (c *Sequencer) submitBatchToDA(batch sequencing.Batch) error {
 	numSubmittedBatches := 0
 	attempt := 0
 
-	maxBlobSize := c.maxDABlobSize
+	maxBlobSize := c.maxSize
 	initialMaxBlobSize := maxBlobSize
 	initialGasPrice := c.dalc.GasPrice
 	gasPrice := c.dalc.GasPrice
@@ -277,57 +576,94 @@ func getRemainingSleep(start time.Time, blockTime time.Duration, sleep time.Dura
 	return remaining + sleep
 }
 
-func hashSHA256(data []byte) []byte {
-	hash := sha256.Sum256(data)
-	return hash[:]
-}
-
 // SubmitRollupTransaction implements sequencing.Sequencer.
-func (c *Sequencer) SubmitRollupTransaction(ctx context.Context, rollupId []byte, tx []byte) error {
-	if c.rollupId == nil {
-		c.rollupId = rollupId
-	} else {
-		if !bytes.Equal(c.rollupId, rollupId) {
-			return ErrorRollupIdMismatch
-		}
+func (c *Sequencer) SubmitRollupTransaction(ctx context.Context, req sequencing.SubmitRollupTransactionRequest) (*sequencing.SubmitRollupTransactionResponse, error) {
+	if !c.isValid(req.RollupId) {
+		return nil, ErrInvalidRollupId
 	}
-	c.tq.AddTransaction(tx)
-	return nil
+	err := c.tq.AddTransaction(req.Tx, c.db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add transaction: %w", err)
+	}
+	return &sequencing.SubmitRollupTransactionResponse{}, nil
 }
 
 // GetNextBatch implements sequencing.Sequencer.
-func (c *Sequencer) GetNextBatch(ctx context.Context, lastBatchHash sequencing.Hash) (*sequencing.Batch, time.Time, error) {
+func (c *Sequencer) GetNextBatch(ctx context.Context, req sequencing.GetNextBatchRequest) (*sequencing.GetNextBatchResponse, error) {
+	if !c.isValid(req.RollupId) {
+		return nil, ErrInvalidRollupId
+	}
 	now := time.Now()
-	if c.lastBatchHash == nil {
-		if lastBatchHash != nil {
-			return nil, now, errors.New("lastBatch is supposed to be nil")
-		}
-	} else if lastBatchHash == nil {
-		return nil, now, errors.New("lastBatch is not supposed to be nil")
-	} else {
-		if !bytes.Equal(c.lastBatchHash, lastBatchHash) {
-			return nil, now, errors.New("supplied lastBatch does not match with sequencer last batch")
-		}
+	c.lastBatchHashMutex.Lock()
+	defer c.lastBatchHashMutex.Unlock()
+	lastBatchHash := c.lastBatchHash
+
+	if !reflect.DeepEqual(lastBatchHash, req.LastBatchHash) {
+		return nil, fmt.Errorf("batch hash mismatch: lastBatchHash = %x, req.LastBatchHash = %x", lastBatchHash, req.LastBatchHash)
 	}
 
-	batch := c.bq.Next()
-	if batch.Transactions == nil {
-		return batch, now, nil
+	// Set the max size if it is provided
+	if req.MaxBytes > 0 {
+		c.CompareAndSetMaxSize(req.MaxBytes)
 	}
 
-	batchBytes, err := batch.Marshal()
+	batch, err := c.bq.Next(c.db)
 	if err != nil {
-		return nil, now, err
+		return nil, err
 	}
 
-	c.lastBatchHash = hashSHA256(batchBytes)
-	c.seenBatches[string(c.lastBatchHash)] = struct{}{}
-	return batch, now, nil
+	batchRes := &sequencing.GetNextBatchResponse{Batch: batch, Timestamp: now}
+	if batch.Transactions == nil {
+		return batchRes, nil
+	}
+
+	h, err := batch.Hash()
+	if err != nil {
+		return c.recover(*batch, err)
+	}
+
+	c.lastBatchHash = h
+	err = c.setLastBatchHash(h)
+	if err != nil {
+		return c.recover(*batch, err)
+	}
+
+	hexHash := hex.EncodeToString(h)
+	c.seenBatchesMutex.Lock()
+	c.seenBatches[hexHash] = struct{}{}
+	c.seenBatchesMutex.Unlock()
+	err = c.addSeenBatch(h)
+	if err != nil {
+		return c.recover(*batch, err)
+	}
+
+	return batchRes, nil
+}
+
+func (c *Sequencer) recover(batch sequencing.Batch, err error) (*sequencing.GetNextBatchResponse, error) {
+	// Revert the batch if Hash() errors out by adding it back to the BatchQueue
+	revertErr := c.bq.AddBatch(batch, c.db)
+	if revertErr != nil {
+		return nil, fmt.Errorf("failed to revert batch: %w", revertErr)
+	}
+	return nil, fmt.Errorf("failed to generate hash for batch: %w", err)
 }
 
 // VerifyBatch implements sequencing.Sequencer.
-func (c *Sequencer) VerifyBatch(ctx context.Context, batchHash sequencing.Hash) (bool, error) {
+func (c *Sequencer) VerifyBatch(ctx context.Context, req sequencing.VerifyBatchRequest) (*sequencing.VerifyBatchResponse, error) {
 	//TODO: need to add DA verification
-	_, ok := c.seenBatches[string(batchHash)]
-	return ok, nil
+	if !c.isValid(req.RollupId) {
+		return nil, ErrInvalidRollupId
+	}
+	c.seenBatchesMutex.Lock()
+	defer c.seenBatchesMutex.Unlock()
+	key := hex.EncodeToString(req.BatchHash)
+	if _, exists := c.seenBatches[key]; exists {
+		return &sequencing.VerifyBatchResponse{Status: true}, nil
+	}
+	return &sequencing.VerifyBatchResponse{Status: false}, nil
+}
+
+func (c *Sequencer) isValid(rollupId []byte) bool {
+	return bytes.Equal(c.rollupId, rollupId)
 }

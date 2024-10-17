@@ -199,7 +199,7 @@ func (dac *DAClient) SubmitBatch(ctx context.Context, data []*sequencing.Batch, 
 
 // RetrieveBatch retrieves block data from DA.
 func (dac *DAClient) RetrieveBatch(ctx context.Context, dataLayerHeight uint64) ResultRetrieveBatch {
-	ids, err := dac.DA.GetIDs(ctx, dataLayerHeight, dac.Namespace)
+	idsResult, err := dac.DA.GetIDs(ctx, dataLayerHeight, dac.Namespace)
 	if err != nil {
 		return ResultRetrieveBatch{
 			BaseResult: BaseResult{
@@ -209,6 +209,7 @@ func (dac *DAClient) RetrieveBatch(ctx context.Context, dataLayerHeight uint64) 
 			},
 		}
 	}
+	ids := idsResult.IDs
 
 	// If no block data are found, return a non-blocking error.
 	if len(ids) == 0 {
