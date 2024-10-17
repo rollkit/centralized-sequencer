@@ -159,7 +159,7 @@ func TestSequencer_GetNextBatch_LastBatchNilMismatch(t *testing.T) {
 
 	// Test case where lastBatchHash is nil but seq.lastBatchHash is not
 	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: nil})
-	assert.ErrorContains(t, err, "nil mismatch")
+	assert.ErrorContains(t, err, "batch hash mismatch")
 	assert.Nil(t, res)
 }
 
