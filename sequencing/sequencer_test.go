@@ -81,8 +81,13 @@ func TestSequencer_SubmitRollupTransaction(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 
+	// Wait for the transaction to be processed
+	time.Sleep(2 * time.Second)
+
 	// Verify the transaction was added
-	assert.Equal(t, 1, len(seq.tq.GetNextBatch(1000, seq.db).Transactions))
+	nextBatchresp, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: rollupId, LastBatchHash: nil})
+	require.NoError(t, err)
+	assert.Equal(t, 1, len(nextBatchresp.Batch.Transactions))
 
 	// Test with a different rollup ID (expecting an error due to mismatch)
 	res, err = seq.SubmitRollupTransaction(context.Background(), sequencing.SubmitRollupTransactionRequest{RollupId: []byte("rollup2"), Tx: tx})
@@ -131,7 +136,7 @@ func TestSequencer_GetNextBatch_LastBatchMismatch(t *testing.T) {
 
 	// Test case where lastBatchHash does not match seq.lastBatchHash
 	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: []byte("differentHash")})
-	assert.EqualError(t, err, "supplied lastBatch does not match with sequencer last batch")
+	assert.ErrorContains(t, err, "batch hash mismatch")
 	assert.Nil(t, res)
 }
 
@@ -154,7 +159,7 @@ func TestSequencer_GetNextBatch_LastBatchNilMismatch(t *testing.T) {
 
 	// Test case where lastBatchHash is nil but seq.lastBatchHash is not
 	res, err := seq.GetNextBatch(context.Background(), sequencing.GetNextBatchRequest{RollupId: seq.rollupId, LastBatchHash: nil})
-	assert.EqualError(t, err, "lastBatch is not supposed to be nil")
+	assert.ErrorContains(t, err, "nil mismatch")
 	assert.Nil(t, res)
 }
 
