@@ -31,6 +31,7 @@ func main() {
 		da_address    string
 		da_namespace  string
 		da_auth_token string
+		db_path       string
 	)
 	flag.StringVar(&host, "host", defaultHost, "centralized sequencer host")
 	flag.StringVar(&port, "port", defaultPort, "centralized sequencer port")
@@ -39,6 +40,7 @@ func main() {
 	flag.StringVar(&da_address, "da_address", defaultDA, "DA address")
 	flag.StringVar(&da_namespace, "da_namespace", "", "DA namespace where the sequencer submits transactions")
 	flag.StringVar(&da_auth_token, "da_auth_token", "", "auth token for the DA")
+	flag.StringVar(&db_path, "db_path", "", "path to the database")
 
 	flag.Parse()
 
@@ -58,7 +60,7 @@ func main() {
 		log.Fatalf("Error decoding namespace: %v", err)
 	}
 
-	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime)
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, db_path)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}
