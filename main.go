@@ -78,8 +78,11 @@ func main() {
 		}()
 	}
 
-	metrics := sequencing.DefaultMetricsProvider(metricsEnabled)
-	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, metrics(da_namespace), db_path)
+	metrics, err := sequencing.DefaultMetricsProvider(metricsEnabled)(da_namespace)
+	if err != nil {
+		log.Fatalf("Failed to create metrics: %v", err)
+	}
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, metrics, db_path)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}
