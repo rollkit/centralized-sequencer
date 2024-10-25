@@ -38,7 +38,7 @@ type Metrics struct {
 	// Wallet Balance
 	// WalletBalance metrics.Gauge
 	// Transaction Status
-	TransactionStatus metrics.Histogram
+	TransactionStatus metrics.Gauge
 	// Number of pending blocks.
 	NumPendingBlocks metrics.Gauge
 	// Last included block height
@@ -67,11 +67,10 @@ func PrometheusMetrics(labelsAndValues ...string) *Metrics {
 			Name:      "last_blob_size",
 			Help:      "The size in bytes of the last DA blob.",
 		}, labels).With(labelsAndValues...),
-		TransactionStatus: prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+		TransactionStatus: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
 			Subsystem: MetricsSubsystem,
 			Name:      "transaction_status",
-			Help:      "Distribution of transaction statuses for DA submissions.",
-			Buckets:   []float64{0, 1, 2, 3, 4, 5, 6, 7},
+			Help:      "Count of transaction statuses for DA submissions",
 		}, labels).With(labelsAndValues...),
 		NumPendingBlocks: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
 			Subsystem: MetricsSubsystem,
@@ -91,7 +90,7 @@ func NopMetrics() *Metrics {
 	return &Metrics{
 		GasPrice:            discard.NewGauge(),
 		LastBlobSize:        discard.NewGauge(),
-		TransactionStatus:   discard.NewHistogram(),
+		TransactionStatus:   discard.NewGauge(),
 		NumPendingBlocks:    discard.NewGauge(),
 		IncludedBlockHeight: discard.NewGauge(),
 	}

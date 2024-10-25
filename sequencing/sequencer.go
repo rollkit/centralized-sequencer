@@ -484,11 +484,11 @@ func (c *Sequencer) publishBatch() error {
 	return nil
 }
 
-func (c *Sequencer) recordMetrics(gasPrice float64, blobSize uint64, status da.StatusCode, numPendingBlocks int, includedBlockHeight uint64) {
+func (c *Sequencer) recordMetrics(gasPrice float64, blobSize uint64, statusCode da.StatusCode, numPendingBlocks int, includedBlockHeight uint64) {
 	if c.metrics != nil {
 		c.metrics.GasPrice.Set(float64(gasPrice))
 		c.metrics.LastBlobSize.Set(float64(blobSize))
-		c.metrics.TransactionStatus.Observe(float64(status))
+		c.metrics.TransactionStatus.With("status", fmt.Sprintf("%d", statusCode)).Add(1)
 		c.metrics.NumPendingBlocks.Set(float64(numPendingBlocks))
 		c.metrics.IncludedBlockHeight.Set(float64(includedBlockHeight))
 	}
