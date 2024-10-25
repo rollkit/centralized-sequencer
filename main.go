@@ -70,11 +70,11 @@ func main() {
 	if metricsEnabled {
 		go func() {
 			log.Printf("Starting metrics server on %v...\n", metricsAddress)
-			http.Handle("/metrics", promhttp.Handler())
 			err := http.ListenAndServe(metricsAddress, nil) // #nosec G114
 			if err != nil {
 				log.Fatalf("Failed to serve metrics: %v", err)
 			}
+			http.Handle("/metrics", promhttp.Handler())
 		}()
 	}
 
