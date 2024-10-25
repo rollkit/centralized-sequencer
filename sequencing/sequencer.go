@@ -282,7 +282,7 @@ type Sequencer struct {
 	db    *badger.DB // BadgerDB instance for persistence
 	dbMux sync.Mutex // Mutex for safe concurrent DB access
 
-	metrics *Metrics
+	metrics         *Metrics
 	metricsProvider MetricsProvider
 }
 
@@ -496,11 +496,11 @@ func (c *Sequencer) publishBatch() error {
 
 func (c *Sequencer) recordMetrics(gasPrice float64, blobSize uint64, status da.StatusCode, numPendingBlocks int, includedBlockHeight uint64) {
 	if c.metrics != nil {
-	  c.metrics.GasPrice.Set(float64(gasPrice))
-	  c.metrics.LastBlobSize.Set(float64(blobSize))
+		c.metrics.GasPrice.Set(float64(gasPrice))
+		c.metrics.LastBlobSize.Set(float64(blobSize))
 		c.metrics.TransactionStatus.Observe(float64(status))
-	  c.metrics.NumPendingBlocks.Set(float64(numPendingBlocks))
-	  c.metrics.IncludedBlockHeight.Set(float64(includedBlockHeight))
+		c.metrics.NumPendingBlocks.Set(float64(numPendingBlocks))
+		c.metrics.IncludedBlockHeight.Set(float64(includedBlockHeight))
 	}
 }
 
