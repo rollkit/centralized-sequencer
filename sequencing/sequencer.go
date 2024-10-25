@@ -282,8 +282,7 @@ type Sequencer struct {
 	db    *badger.DB // BadgerDB instance for persistence
 	dbMux sync.Mutex // Mutex for safe concurrent DB access
 
-	metrics         *Metrics
-	metricsProvider MetricsProvider
+	metrics *Metrics
 }
 
 // NewSequencer ...
@@ -306,22 +305,12 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 	} else {
 		opts = badger.DefaultOptions(dbPath)
 	}
-	s := &Sequencer{
-		dalc:        dalc,
-		batchTime:   batchTime,
-		ctx:         ctx,
-		maxSize:     maxBlobSize,
-		tq:          NewTransactionQueue(),
-		bq:          NewBatchQueue(),
-		seenBatches: make(map[string]struct{}),
-		metrics:     metrics,
-	}
 	opts = opts.WithLogger(nil)
 	db, err := badger.Open(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open BadgerDB: %w", err)
 	}
-	s = &Sequencer{
+	s := &Sequencer{
 		dalc:        dalc,
 		batchTime:   batchTime,
 		ctx:         ctx,
@@ -331,6 +320,7 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 		bq:          NewBatchQueue(),
 		seenBatches: make(map[string]struct{}),
 		db:          db,
+		metrics:     metrics,
 	}
 
 	// Load last batch hash from DB to recover from crash
@@ -602,13 +592,8 @@ func getRemainingSleep(start time.Time, blockTime time.Duration, sleep time.Dura
 
 // SubmitRollupTransaction implements sequencing.Sequencer.
 func (c *Sequencer) SubmitRollupTransaction(ctx context.Context, req sequencing.SubmitRollupTransactionRequest) (*sequencing.SubmitRollupTransactionResponse, error) {
-	if c.rollupId == nil {
-		c.rollupId = req.RollupId
-		c.metrics = c.metricsProvider(hex.EncodeToString(req.RollupId))
-	} else {
-		if !bytes.Equal(c.rollupId, req.RollupId) {
-			return nil, ErrInvalidRollupId
-		}
+	if !c.isValid(req.RollupId) {
+		return nil, ErrInvalidRollupId
 	}
 	err := c.tq.AddTransaction(req.Tx, c.db)
 	if err != nil {

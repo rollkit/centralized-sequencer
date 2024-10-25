@@ -33,7 +33,6 @@ type Metrics struct {
 	GasPrice metrics.Gauge
 	// Last submitted blob size
 	LastBlobSize metrics.Gauge
-	// TODO(tuxcanfly): needs gas used, wallet balance from go-da
 	// cost / byte
 	// CostPerByte metrics.Gauge
 	// Wallet Balance

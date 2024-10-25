@@ -27,14 +27,14 @@ const (
 
 func main() {
 	var (
-		host          string
-		port          string
-		listenAll     bool
-		batchTime     time.Duration
-		da_address    string
-		da_namespace  string
-		da_auth_token string
-		db_path       string
+		host           string
+		port           string
+		listenAll      bool
+		batchTime      time.Duration
+		da_address     string
+		da_namespace   string
+		da_auth_token  string
+		db_path        string
 		metricsEnabled bool
 		metricsAddress string
 	)
@@ -79,7 +79,7 @@ func main() {
 	}
 
 	metrics := sequencing.DefaultMetricsProvider(metricsEnabled)
-	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, metrics(""), db_path)
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, metrics(da_namespace), db_path)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}
