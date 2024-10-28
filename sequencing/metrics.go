@@ -59,32 +59,32 @@ func PrometheusMetrics(labelsAndValues ...string) (*Metrics, error) {
 		labels = append(labels, labelsAndValues[i])
 	}
 	return &Metrics{
-	GasPrice: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-		Subsystem: MetricsSubsystem,
-		Name:      "gas_price",
-		Help:      "The gas price of DA.",
-	}, labels).With(labelsAndValues...),
-	LastBlobSize: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-		Subsystem: MetricsSubsystem,
-		Name:      "last_blob_size",
-		Help:      "The size in bytes of the last DA blob.",
-	}, labels).With(labelsAndValues...),
-	TransactionStatus: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-		Subsystem: MetricsSubsystem,
-		Name:      "transaction_status",
-		Help:      "Count of transaction statuses for DA submissions",
-	}, labels).With(labelsAndValues...),
-	NumPendingBlocks: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-		Subsystem: MetricsSubsystem,
-		Name:      "num_pending_blocks",
-		Help:      "The number of pending blocks for DA submission.",
-	}, labels).With(labelsAndValues...),
-	IncludedBlockHeight: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-		Subsystem: MetricsSubsystem,
-		Name:      "included_block_height",
-		Help:      "The last DA included block height.",
-	}, labels).With(labelsAndValues...),
-}, nil
+		GasPrice: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+			Subsystem: MetricsSubsystem,
+			Name:      "gas_price",
+			Help:      "The gas price of DA.",
+		}, labels).With(labelsAndValues...),
+		LastBlobSize: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+			Subsystem: MetricsSubsystem,
+			Name:      "last_blob_size",
+			Help:      "The size in bytes of the last DA blob.",
+		}, labels).With(labelsAndValues...),
+		TransactionStatus: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+			Subsystem: MetricsSubsystem,
+			Name:      "transaction_status",
+			Help:      "Count of transaction statuses for DA submissions",
+		}, labels).With(labelsAndValues...),
+		NumPendingBlocks: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+			Subsystem: MetricsSubsystem,
+			Name:      "num_pending_blocks",
+			Help:      "The number of pending blocks for DA submission.",
+		}, labels).With(labelsAndValues...),
+		IncludedBlockHeight: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+			Subsystem: MetricsSubsystem,
+			Name:      "included_block_height",
+			Help:      "The last DA included block height.",
+		}, labels).With(labelsAndValues...),
+	}, nil
 }
 
 // NopMetrics returns no-op Metrics.
