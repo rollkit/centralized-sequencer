@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -67,11 +68,17 @@ func main() {
 		log.Fatalf("Error decoding namespace: %v", err)
 	}
 
+	var metricsServer *http.Server
 	if metricsEnabled {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		metricsServer = &http.Server{
+			Addr:    metricsAddress,
+			Handler: mux,
+		}
 		go func() {
 			log.Printf("Starting metrics server on %v...\n", metricsAddress)
-			err := http.ListenAndServe(metricsAddress, nil) // #nosec G114
-			if err != nil {
+			if err := metricsServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Fatalf("Failed to serve metrics: %v", err)
 			}
 			http.Handle("/metrics", promhttp.Handler())
@@ -96,6 +103,11 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGINT)
 	<-interrupt
+	if metricsServer != nil {
+		if err := metricsServer.Shutdown(context.Background()); err != nil {
+			log.Printf("Error shutting down metrics server: %v", err)
+		}
+	}
 	fmt.Println("\nCtrl+C pressed. Exiting...")
 	os.Exit(0)
 }
