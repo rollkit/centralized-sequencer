@@ -2,7 +2,7 @@
 
 centralized-sequencer is an implementation of the [Generic Sequencer interface](https://github.com/rollkit/go-sequencing)
 for modular blockchains. It runs a gRPC service,
-which can be used by rollup clients to sequence transactions to Celestia da.
+which can be used by rollup clients to sequence transactions to DA layer.
 
 <!-- markdownlint-disable MD013 -->
 [![build-and-test](https://github.com/rollkit/centralized-sequencer/actions/workflows/ci_release.yml/badge.svg)](https://github.com/rollkit/centralized-sequencer/actions/workflows/ci_release.yml)
@@ -30,7 +30,7 @@ make build
 ## Usage
 
 centralized-sequencer exposes a gRPC service that can be used with any gRPC
-client to sequence rollup transactions to the celestia network.
+client to sequence rollup transactions to a DA layer.
 
 ## Example
 
@@ -91,11 +91,3 @@ If you're looking for issues to work on, try looking at the [good first issue
 list](https://github.com/rollkit/centralized-sequencer/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 Issues with this tag are suitable for a new external contributor and is a great
 way to find something you can help with!
-
-Please join our
-[Community Discord](https://discord.com/invite/YsnTPcSfWQ)
-to ask questions, discuss your ideas, and connect with other contributors.
-
-## Code of Conduct
-
-See our Code of Conduct [here](https://docs.celestia.org/community/coc).
