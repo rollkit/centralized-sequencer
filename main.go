@@ -73,8 +73,9 @@ func main() {
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", promhttp.Handler())
 		metricsServer = &http.Server{
-			Addr:    metricsAddress,
-			Handler: mux,
+			Addr:              metricsAddress,
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second,
 		}
 		go func() {
 			log.Printf("Starting metrics server on %v...\n", metricsAddress)
