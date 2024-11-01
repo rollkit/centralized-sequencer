@@ -40,7 +40,7 @@ type Metrics struct {
 	// Wallet Balance
 	// WalletBalance metrics.Gauge
 	// Transaction Status
-	TransactionStatus metrics.Gauge
+	TransactionStatus metrics.Counter
 	// Number of pending blocks.
 	NumPendingBlocks metrics.Gauge
 	// Last included block height
@@ -69,7 +69,7 @@ func PrometheusMetrics(labelsAndValues ...string) (*Metrics, error) {
 			Name:      "last_blob_size",
 			Help:      "The size in bytes of the last DA blob.",
 		}, labels).With(labelsAndValues...),
-		TransactionStatus: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+		TransactionStatus: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
 			Subsystem: MetricsSubsystem,
 			Name:      "transaction_status",
 			Help:      "Count of transaction statuses for DA submissions",
@@ -92,7 +92,7 @@ func NopMetrics() (*Metrics, error) {
 	return &Metrics{
 		GasPrice:            discard.NewGauge(),
 		LastBlobSize:        discard.NewGauge(),
-		TransactionStatus:   discard.NewGauge(),
+		TransactionStatus:   discard.NewCounter(),
 		NumPendingBlocks:    discard.NewGauge(),
 		IncludedBlockHeight: discard.NewGauge(),
 	}, nil

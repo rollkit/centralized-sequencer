@@ -82,7 +82,6 @@ func main() {
 			if err := metricsServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Fatalf("Failed to serve metrics: %v", err)
 			}
-			http.Handle("/metrics", promhttp.Handler())
 		}()
 	}
 
