@@ -1,15 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/rollkit/centralized-sequencer/sequencing"
 	sequencingGRPC "github.com/rollkit/go-sequencing/proxy/grpc"
@@ -24,14 +28,16 @@ const (
 
 func main() {
 	var (
-		host          string
-		port          string
-		listenAll     bool
-		batchTime     time.Duration
-		da_address    string
-		da_namespace  string
-		da_auth_token string
-		db_path       string
+		host           string
+		port           string
+		listenAll      bool
+		batchTime      time.Duration
+		da_address     string
+		da_namespace   string
+		da_auth_token  string
+		db_path        string
+		metricsEnabled bool
+		metricsAddress string
 	)
 	flag.StringVar(&host, "host", defaultHost, "centralized sequencer host")
 	flag.StringVar(&port, "port", defaultPort, "centralized sequencer port")
@@ -41,6 +47,8 @@ func main() {
 	flag.StringVar(&da_namespace, "da_namespace", "", "DA namespace where the sequencer submits transactions")
 	flag.StringVar(&da_auth_token, "da_auth_token", "", "auth token for the DA")
 	flag.StringVar(&db_path, "db_path", "", "path to the database")
+	flag.BoolVar(&metricsEnabled, "metrics", false, "Enable Prometheus metrics")
+	flag.StringVar(&metricsAddress, "metrics-address", ":8080", "Address to expose Prometheus metrics")
 
 	flag.Parse()
 
@@ -60,7 +68,28 @@ func main() {
 		log.Fatalf("Error decoding namespace: %v", err)
 	}
 
-	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, db_path)
+	var metricsServer *http.Server
+	if metricsEnabled {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		metricsServer = &http.Server{
+			Addr:              metricsAddress,
+			Handler:           mux,
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		go func() {
+			log.Printf("Starting metrics server on %v...\n", metricsAddress)
+			if err := metricsServer.ListenAndServe(); err != http.ErrServerClosed {
+				log.Fatalf("Failed to serve metrics: %v", err)
+			}
+		}()
+	}
+
+	metrics, err := sequencing.DefaultMetricsProvider(metricsEnabled)(da_namespace)
+	if err != nil {
+		log.Fatalf("Failed to create metrics: %v", err)
+	}
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, metrics, db_path)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}
@@ -74,6 +103,11 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGINT)
 	<-interrupt
+	if metricsServer != nil {
+		if err := metricsServer.Shutdown(context.Background()); err != nil {
+			log.Printf("Error shutting down metrics server: %v", err)
+		}
+	}
 	fmt.Println("\nCtrl+C pressed. Exiting...")
 	os.Exit(0)
 }
