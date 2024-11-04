@@ -1,9 +1,6 @@
 # Build stage
 FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS build-env
 
-# Set environment variables
-ENV GO111MODULE=on
-
 # Set the working directory for the build
 WORKDIR /src
 
