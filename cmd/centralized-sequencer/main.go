@@ -27,6 +27,7 @@ func main() {
 		host          string
 		port          string
 		listenAll     bool
+		rollupId      string
 		batchTime     time.Duration
 		da_address    string
 		da_namespace  string
@@ -36,6 +37,7 @@ func main() {
 	flag.StringVar(&host, "host", defaultHost, "centralized sequencer host")
 	flag.StringVar(&port, "port", defaultPort, "centralized sequencer port")
 	flag.BoolVar(&listenAll, "listen-all", false, "listen on all network interfaces (0.0.0.0) instead of just localhost")
+	flag.StringVar(&rollupId, "rollup-id", "rollupId", "rollup id")
 	flag.DurationVar(&batchTime, "batch-time", defaultBatchTime, "time in seconds to wait before generating a new batch")
 	flag.StringVar(&da_address, "da_address", defaultDA, "DA address")
 	flag.StringVar(&da_namespace, "da_namespace", "", "DA namespace where the sequencer submits transactions")
@@ -60,13 +62,13 @@ func main() {
 		log.Fatalf("Error decoding namespace: %v", err)
 	}
 
-	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, batchTime, db_path)
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, []byte(rollupId), batchTime, db_path)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}
 	grpcServer := sequencingGRPC.NewServer(centralizedSeq, centralizedSeq, centralizedSeq)
 
-	log.Println("Starting gRPC server on port 50051...")
+	log.Println("Starting centralized sequencing gRPC server on port 50051...")
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
