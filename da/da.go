@@ -80,6 +80,8 @@ type BaseResult struct {
 	Message string
 	// DAHeight informs about a height on Data Availability Layer for given result.
 	DAHeight uint64
+	// BlobSize is the size of the blob submitted.
+	BlobSize uint64
 	// SubmittedCount is the number of successfully submitted blocks.
 	SubmittedCount uint64
 }
@@ -192,6 +194,7 @@ func (dac *DAClient) SubmitBatch(ctx context.Context, data []*sequencing.Batch, 
 		BaseResult: BaseResult{
 			Code:           StatusSuccess,
 			DAHeight:       binary.LittleEndian.Uint64(ids[0]),
+			BlobSize:       blobSize,
 			SubmittedCount: uint64(len(ids)),
 		},
 	}

@@ -51,7 +51,8 @@ func startMockDAServJSONRPC(ctx context.Context, da_address string) (*proxy.Serv
 
 func TestNewSequencer(t *testing.T) {
 	// Create a new sequencer with mock DA client
-	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), []byte("rollup1"), 1*time.Second, "")
+	metrics, _ := NopMetrics()
+	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), []byte("rollup1"), 10*time.Second, metrics, "")
 	require.NoError(t, err)
 	defer func() {
 		err := seq.Close()
@@ -67,7 +68,8 @@ func TestNewSequencer(t *testing.T) {
 
 func TestSequencer_SubmitRollupTransaction(t *testing.T) {
 	// Initialize a new sequencer
-	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), []byte("rollup1"), 1*time.Second, "")
+	metrics, _ := NopMetrics()
+	seq, err := NewSequencer(MockDAAddressHTTP, "authToken", []byte("namespace"), []byte("rollup1"), 10*time.Second, metrics, "")
 	require.NoError(t, err)
 	defer func() {
 		err := seq.Close()

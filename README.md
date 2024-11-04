@@ -54,6 +54,8 @@ Run centralized-sequencer by specifying DA network details:
 | `host`                | centralized sequencer host            | localhost |
 | `port`             | centralized sequencer port | 50051 |
 | `listen-all` |listen on all network interfaces (0.0.0.0) instead of just localhost|disabled|
+| `metrics` |enable prometheus metrics|disabled|
+| `metrics-address` |address to expose prometheus metrics|`":8080"`|
 <!-- markdownlint-enable MD013 -->
 
 See `./build/centralized-sequencer --help` for details.
