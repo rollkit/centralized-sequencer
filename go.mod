@@ -6,8 +6,10 @@ toolchain go1.22.3
 
 require (
 	github.com/dgraph-io/badger/v3 v3.2103.5
+	github.com/go-kit/kit v0.13.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/ipfs/go-log/v2 v2.5.1
+	github.com/prometheus/client_golang v1.19.1
 	github.com/rollkit/go-da v0.8.0
 	github.com/rollkit/go-sequencing v0.3.0
 	github.com/rollkit/rollkit v0.13.7
@@ -30,7 +32,6 @@ require (
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/filecoin-project/go-jsonrpc v0.6.0 // indirect
-	github.com/go-kit/kit v0.13.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/golang/glog v1.2.2 // indirect
@@ -68,7 +69,6 @@ require (
 	github.com/petermattis/goid v0.0.0-20230317030725-371a4b8eda08 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus/client_golang v1.19.1 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
