@@ -262,7 +262,7 @@ func totalBytes(data [][]byte) int {
 	return total
 }
 
-// Sequencer implements go-sequencing interface using celestia backend
+// Sequencer implements go-sequencing interface
 type Sequencer struct {
 	dalc      *da.DAClient
 	batchTime time.Duration
