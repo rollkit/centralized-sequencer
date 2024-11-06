@@ -262,7 +262,7 @@ func totalBytes(data [][]byte) int {
 	return total
 }
 
-// Sequencer implements go-sequencing interface using celestia backend
+// Sequencer implements go-sequencing interface
 type Sequencer struct {
 	dalc      *da.DAClient
 	batchTime time.Duration
@@ -286,7 +286,7 @@ type Sequencer struct {
 }
 
 // NewSequencer ...
-func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime time.Duration, metrics *Metrics, dbPath string) (*Sequencer, error) {
+func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, rollupId []byte, batchTime time.Duration, metrics *Metrics, dbPath string) (*Sequencer, error) {
 	ctx := context.Background()
 	dac, err := proxyda.NewClient(daAddress, daAuthToken)
 	if err != nil {
@@ -315,7 +315,7 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, batchTime t
 		batchTime:   batchTime,
 		ctx:         ctx,
 		maxSize:     maxBlobSize,
-		rollupId:    daNamespace,
+		rollupId:    rollupId,
 		tq:          NewTransactionQueue(),
 		bq:          NewBatchQueue(),
 		seenBatches: make(map[string]struct{}),

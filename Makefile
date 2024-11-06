@@ -10,7 +10,7 @@ count := 1
 ## build: Build centralized-sequencer binary.
 build:
 	@echo "--> Building centralized-sequencer"
-	@go build -o build/ ${LDFLAGS} ./...
+	@go build -o build/ ./...
 .PHONY: build
 
 ## help: Show this help message
