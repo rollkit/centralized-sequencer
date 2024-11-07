@@ -10,7 +10,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/prometheus/client_golang v1.20.5
-	github.com/rollkit/go-da v0.8.0
+	github.com/rollkit/go-da v0.9.0
 	github.com/rollkit/go-sequencing v0.3.0
 	github.com/rollkit/rollkit v0.14.0
 	github.com/stretchr/testify v1.9.0
