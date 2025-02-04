@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/dgraph-io/badger/v3"
+
 	"github.com/rollkit/go-sequencing"
 )
 
