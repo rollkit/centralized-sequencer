@@ -3,6 +3,7 @@ package sequencing
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/rollkit/go-sequencing"
 )
 
+// BatchExtender is an interface for extending a batch of transactions
 type BatchExtender interface {
 	Head(max uint64) ([]byte, error)
 	Tail(max uint64) ([]byte, error)
@@ -99,7 +101,7 @@ func (tq *TransactionQueue) GetNextBatch(max uint64, db *badger.DB) sequencing.B
 			_, err := txn.Get([]byte(txHash))
 			if err != nil {
 				// If the transaction not found is the head or tail, skip it as they are not in the queue
-				if err == badger.ErrKeyNotFound && (i == 0 || i == len(batch)-1) {
+				if errors.Is(err, badger.ErrKeyNotFound) && (i == 0 || i == len(batch)-1) {
 					return nil
 				}
 				return err
