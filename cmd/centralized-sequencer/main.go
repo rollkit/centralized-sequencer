@@ -91,7 +91,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create metrics: %v", err)
 	}
-	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, []byte(rollupId), batchTime, metrics, db_path)
+	centralizedSeq, err := sequencing.NewSequencer(da_address, da_auth_token, namespace, []byte(rollupId), batchTime, metrics, db_path, nil)
 	if err != nil {
 		log.Fatalf("Failed to create centralized sequencer: %v", err)
 	}
