@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v4"
 	logging "github.com/ipfs/go-log/v2"
 
 	"github.com/rollkit/centralized-sequencer/da"
