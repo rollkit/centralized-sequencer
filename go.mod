@@ -12,7 +12,7 @@ require (
 	github.com/prometheus/client_golang v1.20.5
 	github.com/rollkit/go-da v0.9.0
 	github.com/rollkit/go-sequencing v0.4.1
-	github.com/rollkit/rollkit v0.14.0
+	github.com/rollkit/rollkit v0.14.1
 	github.com/stretchr/testify v1.9.0
 )
 
