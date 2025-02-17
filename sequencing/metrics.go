@@ -73,7 +73,7 @@ func PrometheusMetrics(labelsAndValues ...string) (*Metrics, error) {
 			Subsystem: MetricsSubsystem,
 			Name:      "transaction_status",
 			Help:      "Count of transaction statuses for DA submissions",
-		}, labels).With(labelsAndValues...),
+		}, append(labels, "status")).With(labelsAndValues...),
 		NumPendingBlocks: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
 			Subsystem: MetricsSubsystem,
 			Name:      "num_pending_blocks",
