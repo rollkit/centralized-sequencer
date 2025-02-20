@@ -96,7 +96,7 @@ func (bq *BatchQueue) Next(db *badger.DB) (*sequencing.Batch, error) {
 			return err
 		}
 		// Delete the batch from BadgerDB
-		return txn.Delete(h)
+		return txn.Delete(key)
 	})
 	if err != nil {
 		return &sequencing.Batch{Transactions: nil}, err
