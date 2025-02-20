@@ -161,7 +161,7 @@ func (c *Sequencer) LoadLastBatchHashFromDB() error {
 	var hash []byte
 	// Load the last batch hash from BadgerDB if it exists
 	err := c.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("lastBatchHash"))
+		item, err := txn.Get(keyLastBatchHash)
 		if errors.Is(err, badger.ErrKeyNotFound) {
 			// If no last batch hash exists, it's the first time or nothing was processed
 			c.lastBatchHash = nil
