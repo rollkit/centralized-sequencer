@@ -31,107 +31,13 @@ const defaultMempoolTTL = 25
 
 var initialBackoff = 100 * time.Millisecond
 
-// BatchQueue ...
-type BatchQueue struct {
-	queue []sequencing.Batch
-	mu    sync.Mutex
-}
-
-// NewBatchQueue creates a new BatchQueue
-func NewBatchQueue() *BatchQueue {
-	return &BatchQueue{
-		queue: make([]sequencing.Batch, 0),
-	}
-}
-
-// AddBatch adds a new transaction to the queue
-func (bq *BatchQueue) AddBatch(batch sequencing.Batch, db *badger.DB) error {
-	bq.mu.Lock()
-	bq.queue = append(bq.queue, batch)
-	bq.mu.Unlock()
-
-	// Get the hash and bytes of the batch
-	h, err := batch.Hash()
-	if err != nil {
-		return err
-	}
-
-	// Marshal the batch
-	batchBytes, err := batch.Marshal()
-	if err != nil {
-		return err
-	}
-
-	// Store the batch in BadgerDB
-	err = db.Update(func(txn *badger.Txn) error {
-		return txn.Set(h, batchBytes)
-	})
-	return err
-}
-
-// Next extracts a batch of transactions from the queue
-func (bq *BatchQueue) Next(db *badger.DB) (*sequencing.Batch, error) {
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
-	if len(bq.queue) == 0 {
-		return &sequencing.Batch{Transactions: nil}, nil
-	}
-	batch := bq.queue[0]
-	bq.queue = bq.queue[1:]
-
-	h, err := batch.Hash()
-	if err != nil {
-		return &sequencing.Batch{Transactions: nil}, err
-	}
-
-	// Remove the batch from BadgerDB after processing
-	err = db.Update(func(txn *badger.Txn) error {
-		// Get the batch to ensure it exists in the DB before deleting
-		_, err := txn.Get(h)
-		if err != nil {
-			return err
-		}
-		// Delete the batch from BadgerDB
-		return txn.Delete(h)
-	})
-	if err != nil {
-		return &sequencing.Batch{Transactions: nil}, err
-	}
-
-	return &batch, nil
-}
-
-// LoadFromDB reloads all batches from BadgerDB into the in-memory queue after a crash or restart.
-func (bq *BatchQueue) LoadFromDB(db *badger.DB) error {
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
-
-	err := db.View(func(txn *badger.Txn) error {
-		// Create an iterator to go through all batches stored in BadgerDB
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
-		defer it.Close()
-
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
-			err := item.Value(func(val []byte) error {
-				var batch sequencing.Batch
-				// Unmarshal the batch bytes and add them to the in-memory queue
-				err := batch.Unmarshal(val)
-				if err != nil {
-					return err
-				}
-				bq.queue = append(bq.queue, batch)
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
-	return err
-}
+// Key prefixes for BadgerDB
+var (
+	keyLastBatchHash   = []byte("lastBatchHash")
+	keyPrefixSeenBatch = []byte("seenBatch")
+	keyPrefixBatch     = []byte("batch")
+	keyPrefixTx        = []byte("tx")
+)
 
 // Sequencer implements go-sequencing interface
 type Sequencer struct {

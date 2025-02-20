@@ -47,7 +47,8 @@ func (tq *TransactionQueue) AddTransaction(tx sequencing.Tx, db *badger.DB) erro
 
 	// Store transaction in BadgerDB
 	err := db.Update(func(txn *badger.Txn) error {
-		return txn.Set([]byte(GetTransactionHash(tx)), tx)
+		key := append(keyPrefixTx, []byte(GetTransactionHash(tx))...)
+		return txn.Set(key, tx)
 	})
 	return err
 }
@@ -99,7 +100,8 @@ func (tq *TransactionQueue) GetNextBatch(max uint64, db *badger.DB) sequencing.B
 		txHash := GetTransactionHash(tx)
 		err := db.Update(func(txn *badger.Txn) error {
 			// Get and then delete the transaction from BadgerDB
-			_, err := txn.Get([]byte(txHash))
+			key := append(keyPrefixTx, []byte(txHash)...)
+			_, err := txn.Get(key)
 			if err != nil {
 				// If the transaction not found is the head or tail, skip it as they are not in the queue
 				if errors.Is(err, badger.ErrKeyNotFound) && (i == 0 || i == len(batch)-1) {
@@ -107,7 +109,7 @@ func (tq *TransactionQueue) GetNextBatch(max uint64, db *badger.DB) sequencing.B
 				}
 				return err
 			}
-			return txn.Delete([]byte(txHash)) // Remove processed transaction
+			return txn.Delete(key) // Remove processed transaction
 		})
 		if err != nil {
 			return sequencing.Batch{Transactions: nil} // Return empty batch if any transaction retrieval fails
@@ -125,7 +127,9 @@ func (tq *TransactionQueue) LoadFromDB(db *badger.DB) error {
 	// Start a read-only transaction
 	err := db.View(func(txn *badger.Txn) error {
 		// Create an iterator to go through all transactions stored in BadgerDB
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = keyPrefixTx
+		it := txn.NewIterator(opts)
 		defer it.Close() // Ensure that the iterator is properly closed
 
 		// Iterate through all items in the database
@@ -157,7 +161,8 @@ func (tq *TransactionQueue) AddBatchBackToQueue(batch sequencing.Batch, db *badg
 	// Optionally, persist the batch back to BadgerDB
 	for _, tx := range batch.Transactions {
 		err := db.Update(func(txn *badger.Txn) error {
-			return txn.Set([]byte(GetTransactionHash(tx)), tx) // Store transaction back in DB
+			key := append(keyPrefixTx, []byte(GetTransactionHash(tx))...)
+			return txn.Set(key, tx) // Store transaction back in DB
 		})
 		if err != nil {
 			return fmt.Errorf("failed to revert transaction to DB: %w", err)
