@@ -188,7 +188,9 @@ func (c *Sequencer) LoadSeenBatchesFromDB() error {
 
 	err := c.db.View(func(txn *badger.Txn) error {
 		// Create an iterator to go through all entries in BadgerDB
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = keyPrefixSeenBatch
+		it := txn.NewIterator(opts)
 		defer it.Close()
 
 		for it.Rewind(); it.Valid(); it.Next() {
@@ -216,8 +218,9 @@ func (c *Sequencer) addSeenBatch(hash []byte) error {
 	c.dbMux.Lock()
 	defer c.dbMux.Unlock()
 
+	key := append([]byte(keyPrefixSeenBatch), hash...)
 	return c.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(hash, []byte{1}) // Just to mark the batch as seen
+		return txn.Set(key, []byte{1}) // Just to mark the batch as seen
 	})
 }
 
@@ -433,7 +436,7 @@ func (c *Sequencer) GetNextBatch(ctx context.Context, req sequencing.GetNextBatc
 
 func (c *Sequencer) recover(batch sequencing.Batch, err error) (*sequencing.GetNextBatchResponse, error) {
 	// Revert the batch if Hash() errors out by adding it back to the BatchQueue
-	revertErr := c.bq.AddBatch(batch, c.db)
+	revertErr := c.bq.AddBatchToTheTop(batch, c.db)
 	if revertErr != nil {
 		return nil, fmt.Errorf("failed to revert batch: %w", revertErr)
 	}

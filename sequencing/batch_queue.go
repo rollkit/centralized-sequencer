@@ -20,7 +20,7 @@ func NewBatchQueue() *BatchQueue {
 	}
 }
 
-// AddBatch adds a new transaction to the queue
+// AddBatch adds a new batch to the queue
 func (bq *BatchQueue) AddBatch(batch sequencing.Batch, db *badger.DB) error {
 	bq.mu.Lock()
 	bq.queue = append(bq.queue, batch)
@@ -46,7 +46,7 @@ func (bq *BatchQueue) AddBatch(batch sequencing.Batch, db *badger.DB) error {
 	return err
 }
 
-// AddBatch adds a new transaction to the queue
+// AddBatchToTheTop adds a new batch to the queue, at index 0
 func (bq *BatchQueue) AddBatchToTheTop(batch sequencing.Batch, db *badger.DB) error {
 	bq.mu.Lock()
 	bq.queue = append([]sequencing.Batch{batch}, bq.queue...)
