@@ -14,6 +14,7 @@ require (
 	github.com/rollkit/go-sequencing v0.4.1
 	github.com/rollkit/rollkit v0.14.1
 	github.com/stretchr/testify v1.10.0
+	google.golang.org/grpc v1.67.1
 )
 
 require (
@@ -98,7 +99,6 @@ require (
 	golang.org/x/text v0.18.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240827150818-7e3bb234dfed // indirect
-	google.golang.org/grpc v1.67.1 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
