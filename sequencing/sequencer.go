@@ -3,7 +3,6 @@ package sequencing
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -12,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v4"
 	logging "github.com/ipfs/go-log/v2"
 
 	"github.com/rollkit/centralized-sequencer/da"
@@ -32,235 +31,13 @@ const defaultMempoolTTL = 25
 
 var initialBackoff = 100 * time.Millisecond
 
-// BatchQueue ...
-type BatchQueue struct {
-	queue []sequencing.Batch
-	mu    sync.Mutex
-}
-
-// NewBatchQueue creates a new TransactionQueue
-func NewBatchQueue() *BatchQueue {
-	return &BatchQueue{
-		queue: make([]sequencing.Batch, 0),
-	}
-}
-
-// AddBatch adds a new transaction to the queue
-func (bq *BatchQueue) AddBatch(batch sequencing.Batch, db *badger.DB) error {
-	bq.mu.Lock()
-	bq.queue = append(bq.queue, batch)
-	bq.mu.Unlock()
-
-	// Get the hash and bytes of the batch
-	h, err := batch.Hash()
-	if err != nil {
-		return err
-	}
-
-	// Marshal the batch
-	batchBytes, err := batch.Marshal()
-	if err != nil {
-		return err
-	}
-
-	// Store the batch in BadgerDB
-	err = db.Update(func(txn *badger.Txn) error {
-		return txn.Set(h, batchBytes)
-	})
-	return err
-}
-
-// Next extracts a batch of transactions from the queue
-func (bq *BatchQueue) Next(db *badger.DB) (*sequencing.Batch, error) {
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
-	if len(bq.queue) == 0 {
-		return &sequencing.Batch{Transactions: nil}, nil
-	}
-	batch := bq.queue[0]
-	bq.queue = bq.queue[1:]
-
-	h, err := batch.Hash()
-	if err != nil {
-		return &sequencing.Batch{Transactions: nil}, err
-	}
-
-	// Remove the batch from BadgerDB after processing
-	err = db.Update(func(txn *badger.Txn) error {
-		// Get the batch to ensure it exists in the DB before deleting
-		_, err := txn.Get(h)
-		if err != nil {
-			return err
-		}
-		// Delete the batch from BadgerDB
-		return txn.Delete(h)
-	})
-	if err != nil {
-		return &sequencing.Batch{Transactions: nil}, err
-	}
-
-	return &batch, nil
-}
-
-// LoadFromDB reloads all batches from BadgerDB into the in-memory queue after a crash or restart.
-func (bq *BatchQueue) LoadFromDB(db *badger.DB) error {
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
-
-	err := db.View(func(txn *badger.Txn) error {
-		// Create an iterator to go through all batches stored in BadgerDB
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
-		defer it.Close()
-
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
-			err := item.Value(func(val []byte) error {
-				var batch sequencing.Batch
-				// Unmarshal the batch bytes and add them to the in-memory queue
-				err := batch.Unmarshal(val)
-				if err != nil {
-					return err
-				}
-				bq.queue = append(bq.queue, batch)
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
-	return err
-}
-
-// TransactionQueue is a queue of transactions
-type TransactionQueue struct {
-	queue []sequencing.Tx
-	mu    sync.Mutex
-}
-
-// NewTransactionQueue creates a new TransactionQueue
-func NewTransactionQueue() *TransactionQueue {
-	return &TransactionQueue{
-		queue: make([]sequencing.Tx, 0),
-	}
-}
-
-// GetTransactionHash to get hash from transaction bytes using SHA-256
-func GetTransactionHash(txBytes []byte) string {
-	hashBytes := sha256.Sum256(txBytes)
-	return hex.EncodeToString(hashBytes[:])
-}
-
-// AddTransaction adds a new transaction to the queue
-func (tq *TransactionQueue) AddTransaction(tx sequencing.Tx, db *badger.DB) error {
-	tq.mu.Lock()
-	tq.queue = append(tq.queue, tx)
-	tq.mu.Unlock()
-
-	// Store transaction in BadgerDB
-	err := db.Update(func(txn *badger.Txn) error {
-		return txn.Set([]byte(GetTransactionHash(tx)), tx)
-	})
-	return err
-}
-
-// GetNextBatch extracts a batch of transactions from the queue
-func (tq *TransactionQueue) GetNextBatch(max uint64, db *badger.DB) sequencing.Batch {
-	tq.mu.Lock()
-	defer tq.mu.Unlock()
-
-	var batch [][]byte
-	batchSize := len(tq.queue)
-	if batchSize == 0 {
-		return sequencing.Batch{Transactions: nil}
-	}
-	for {
-		batch = tq.queue[:batchSize]
-		blobSize := totalBytes(batch)
-		if uint64(blobSize) <= max {
-			break
-		}
-		batchSize = batchSize - 1
-	}
-
-	// Retrieve transactions from BadgerDB and remove processed ones
-	for _, tx := range batch {
-		txHash := GetTransactionHash(tx)
-		err := db.Update(func(txn *badger.Txn) error {
-			// Get and then delete the transaction from BadgerDB
-			_, err := txn.Get([]byte(txHash))
-			if err != nil {
-				return err
-			}
-			return txn.Delete([]byte(txHash)) // Remove processed transaction
-		})
-		if err != nil {
-			return sequencing.Batch{Transactions: nil} // Return empty batch if any transaction retrieval fails
-		}
-	}
-	tq.queue = tq.queue[batchSize:]
-	return sequencing.Batch{Transactions: batch}
-}
-
-// LoadFromDB reloads all transactions from BadgerDB into the in-memory queue after a crash.
-func (tq *TransactionQueue) LoadFromDB(db *badger.DB) error {
-	tq.mu.Lock()
-	defer tq.mu.Unlock()
-
-	// Start a read-only transaction
-	err := db.View(func(txn *badger.Txn) error {
-		// Create an iterator to go through all transactions stored in BadgerDB
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
-		defer it.Close() // Ensure that the iterator is properly closed
-
-		// Iterate through all items in the database
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
-			err := item.Value(func(val []byte) error {
-				// Load each transaction from DB and add to the in-memory queue
-				tq.queue = append(tq.queue, val)
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
-	return err
-}
-
-// AddBatchBackToQueue re-adds the batch to the transaction queue (and BadgerDB) after a failure.
-func (tq *TransactionQueue) AddBatchBackToQueue(batch sequencing.Batch, db *badger.DB) error {
-	tq.mu.Lock()
-	defer tq.mu.Unlock()
-
-	// Add the batch back to the in-memory transaction queue
-	tq.queue = append(tq.queue, batch.Transactions...)
-
-	// Optionally, persist the batch back to BadgerDB
-	for _, tx := range batch.Transactions {
-		err := db.Update(func(txn *badger.Txn) error {
-			return txn.Set([]byte(GetTransactionHash(tx)), tx) // Store transaction back in DB
-		})
-		if err != nil {
-			return fmt.Errorf("failed to revert transaction to DB: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func totalBytes(data [][]byte) int {
-	total := 0
-	for _, sub := range data {
-		total += len(sub)
-	}
-	return total
-}
+// Key prefixes for BadgerDB
+var (
+	keyLastBatchHash   = []byte("lastBatchHash")
+	keyPrefixSeenBatch = []byte("seenBatch")
+	keyPrefixBatch     = []byte("batch")
+	keyPrefixTx        = []byte("tx")
+)
 
 // Sequencer implements go-sequencing interface
 type Sequencer struct {
@@ -286,7 +63,7 @@ type Sequencer struct {
 }
 
 // NewSequencer ...
-func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, rollupId []byte, batchTime time.Duration, metrics *Metrics, dbPath string) (*Sequencer, error) {
+func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, rollupId []byte, batchTime time.Duration, metrics *Metrics, dbPath string, extender BatchExtender) (*Sequencer, error) {
 	ctx := context.Background()
 	dac, err := proxyda.NewClient(daAddress, daAuthToken)
 	if err != nil {
@@ -316,7 +93,7 @@ func NewSequencer(daAddress, daAuthToken string, daNamespace []byte, rollupId []
 		ctx:         ctx,
 		maxSize:     maxBlobSize,
 		rollupId:    rollupId,
-		tq:          NewTransactionQueue(),
+		tq:          NewTransactionQueue(extender),
 		bq:          NewBatchQueue(),
 		seenBatches: make(map[string]struct{}),
 		db:          db,
@@ -384,7 +161,7 @@ func (c *Sequencer) LoadLastBatchHashFromDB() error {
 	var hash []byte
 	// Load the last batch hash from BadgerDB if it exists
 	err := c.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("lastBatchHash"))
+		item, err := txn.Get(keyLastBatchHash)
 		if errors.Is(err, badger.ErrKeyNotFound) {
 			// If no last batch hash exists, it's the first time or nothing was processed
 			c.lastBatchHash = nil
@@ -411,7 +188,9 @@ func (c *Sequencer) LoadSeenBatchesFromDB() error {
 
 	err := c.db.View(func(txn *badger.Txn) error {
 		// Create an iterator to go through all entries in BadgerDB
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		opts := badger.DefaultIteratorOptions
+		opts.Prefix = keyPrefixSeenBatch
+		it := txn.NewIterator(opts)
 		defer it.Close()
 
 		for it.Rewind(); it.Valid(); it.Next() {
@@ -439,8 +218,9 @@ func (c *Sequencer) addSeenBatch(hash []byte) error {
 	c.dbMux.Lock()
 	defer c.dbMux.Unlock()
 
+	key := append([]byte(keyPrefixSeenBatch), hash...)
 	return c.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(hash, []byte{1}) // Just to mark the batch as seen
+		return txn.Set(key, []byte{1}) // Just to mark the batch as seen
 	})
 }
 
@@ -656,7 +436,7 @@ func (c *Sequencer) GetNextBatch(ctx context.Context, req sequencing.GetNextBatc
 
 func (c *Sequencer) recover(batch sequencing.Batch, err error) (*sequencing.GetNextBatchResponse, error) {
 	// Revert the batch if Hash() errors out by adding it back to the BatchQueue
-	revertErr := c.bq.AddBatch(batch, c.db)
+	revertErr := c.bq.AddBatchToTheTop(batch, c.db)
 	if revertErr != nil {
 		return nil, fmt.Errorf("failed to revert batch: %w", revertErr)
 	}
