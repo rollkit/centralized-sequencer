@@ -133,9 +133,6 @@ The centralized sequencer implements the following methods as part of the Generi
 
 These methods work together to ensure that the centralized sequencer can effectively manage transaction submissions, retrievals, and verifications, providing a reliable interface for rollup clients to interact with the sequencer.
 
-
-
-
 ### Efficiency Considerations
 
 - The sequencer uses a configurable batch time to balance between latency and efficiency
