@@ -1,0 +1,188 @@
+# ADR 11: Centralized Sequencer
+
+## Changelog
+
+- 2024-10-01: Initial draft
+
+## Context
+
+Rollkit supports modular sequencer implementations and a centralized sequencer is a simple and efficient solution that can serve as a starting point for rollup developers who don't need the complexity of a decentralized sequencing solution.
+
+The centralized sequencer needs to implement the Generic Sequencer interface defined in the `go-sequencing` package, provide transaction batching capabilities, and reliably submit these batches to a DA layer. It should also maintain state to track submitted batches and provide verification capabilities.
+
+## Alternative Approaches
+
+### Decentralized Sequencer
+
+A decentralized sequencer would distribute the sequencing responsibility across multiple nodes, providing better censorship resistance and fault tolerance. However, this approach introduces significant complexity in terms of consensus, leader election, and coordination between nodes. It would also require more resources to operate and maintain.
+
+This approach was not chosen for the initial implementation because:
+1. It adds unnecessary complexity for many use cases
+2. It requires more development time and resources
+3. Many rollup projects start with a centralized sequencer and gradually move towards decentralization
+
+### Embedded Sequencer in Rollup Nodes
+
+Another approach would be to embed sequencing functionality directly into rollup nodes. This would simplify the architecture by eliminating a separate sequencer component.
+
+This approach was not chosen because:
+1. It couples sequencing logic with rollup node logic, reducing modularity
+2. It makes it harder to upgrade or replace the sequencing component independently
+3. It doesn't allow for a dedicated sequencing service that can be optimized separately
+
+## Decision
+
+We implement a standalone centralized sequencer that:
+
+1. Implements the Generic Sequencer interface from the `go-sequencing` package
+2. Exposes a gRPC service for rollup clients to submit transactions
+3. Batches transactions and submits them to a DA layer at regular intervals
+4. Maintains state to track submitted batches and provide verification
+5. Provides metrics for monitoring and observability
+
+The centralized sequencer is a separate repository and can be deployed as a standalone service or as a Docker container.
+
+## Detailed Design
+
+### User Requirements
+
+- Rollup developers need a simple, reliable sequencer that can order transactions and submit them to a DA layer
+- The sequencer should be easy to deploy and configure
+- The sequencer should provide metrics for monitoring
+- The sequencer should be able to recover from crashes and maintain state
+
+### Systems Affected
+
+- Rollup nodes that interact with the sequencer
+- DA layer where batches are submitted
+
+### Data Structures
+
+The centralized sequencer uses the following key data structures:
+
+1. **BatchQueue**: A queue to store batches of transactions waiting to be processed
+   ```go
+   type BatchQueue struct {
+       queue []sequencing.Batch
+       mu    sync.Mutex
+   }
+   ```
+
+2. **Sequencer**: The main sequencer structure that implements the Generic Sequencer interface
+   ```go:centralized-sequencer/adr-11-centralized-sequencer.md
+   type Sequencer struct {
+       da              goda.DA
+       namespace       []byte
+       rollupId        []byte
+       batchTime       time.Duration
+       bq              *BatchQueue
+       lastBatchHash   []byte
+       seenBatches     map[string]struct{}
+       seenBatchesMutex sync.RWMutex
+       metrics         *Metrics
+       db              *badger.DB
+       closed          atomic.Bool
+   }
+   ```
+
+3. **Metrics**: Structure to hold metrics for monitoring
+   ```go
+   type Metrics struct {
+       GasPrice            metrics.Gauge
+       LastBlobSize        metrics.Gauge
+       TransactionStatus   metrics.Counter
+       NumPendingBlocks    metrics.Gauge
+       IncludedBlockHeight metrics.Gauge
+   }
+   ```
+
+### APIs
+
+The centralized sequencer implements the Generic Sequencer interface from the `go-sequencing` package:
+
+```go
+type Sequencer interface {
+    SubmitRollupBatchTxs(ctx context.Context, req SubmitRollupBatchTxsRequest) (*SubmitRollupBatchTxsResponse, error)
+    GetNextBatch(ctx context.Context, req GetNextBatchRequest) (*GetNextBatchResponse, error)
+    VerifyBatch(ctx context.Context, req VerifyBatchRequest) (*VerifyBatchResponse, error)
+}
+```
+
+These methods are exposed via a gRPC service that rollup clients can interact with.
+
+### Efficiency Considerations
+
+- The sequencer uses a configurable batch time to balance between latency and efficiency
+- Transactions are batched to reduce the number of DA submissions
+- The sequencer maintains an in-memory queue for fast access and a persistent database for durability
+- Exponential backoff is used for DA submission retries to handle temporary failures
+
+### Access Patterns
+
+- Rollup clients will submit transactions to the sequencer at varying rates
+- The sequencer will batch transactions and submit them to the DA layer at regular intervals
+- Rollup nodes will request the next batch from the sequencer to process transactions
+
+### Logging, Monitoring, and Observability
+
+The sequencer provides the following metrics:
+- Gas price of DA submissions
+- Size of the last submitted blob
+- Transaction status counts
+- Number of pending blocks
+- Last included block height
+
+These metrics can be exposed via Prometheus for monitoring.
+
+### Security Considerations
+
+- The centralized sequencer is a single point of failure and control
+- Access control is not implemented in the initial version, but can be added in future versions
+- The sequencer validates rollup IDs to ensure transactions are submitted to the correct rollup
+
+### Privacy Considerations
+
+- The sequencer has access to all transactions before they are submitted to the DA layer
+- Transactions are not encrypted, so sensitive data should not be included in transactions
+
+### Testing
+
+The centralized sequencer includes:
+- Unit tests for core functionality
+- Integration tests with a mock DA layer
+- Test coverage reporting via Codecov
+
+### Breaking Changes
+
+This is a new component and does not introduce breaking changes to existing systems.
+
+## Status
+
+Proposed
+
+## Consequences
+
+### Positive
+
+- Provides a simple, production-ready sequencer for rollup developers
+- Implements the Generic Sequencer interface, making it compatible with existing Rollkit components
+- Includes metrics for monitoring and observability
+- Maintains state to track submitted batches and provide verification
+- Can be deployed as a standalone service or as a Docker container
+
+### Negative
+
+- Centralized design introduces a single point of failure
+- No built-in access control or authentication in the initial version
+- Limited scalability compared to a distributed sequencer
+
+### Neutral
+
+- Requires a separate deployment and management of the sequencer service
+- Developers need to configure the sequencer to connect to their chosen DA layer
+
+## References
+
+- [Generic Sequencer Interface](https://github.com/rollkit/go-sequencing)
+- [Rollkit Repository](https://github.com/rollkit/rollkit)
+- [Centralized Sequencer Repository](https://github.com/rollkit/centralized-sequencer)
