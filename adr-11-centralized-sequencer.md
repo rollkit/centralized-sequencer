@@ -114,9 +114,6 @@ type Sequencer interface {
 }
 ```
 
-These methods are exposed via a gRPC service that rollup clients can interact with.
-The centralized sequencer implements the following methods as part of the Generic Sequencer interface:
-
 1. **SubmitRollupBatchTxs**:
    - This method is responsible for accepting a batch of transactions from a rollup client. It takes a context and a request containing the rollup ID and the batch of transactions to be submitted.
    - The method first validates the rollup ID to ensure it matches the expected ID for the sequencer. If the ID is invalid, it returns an error.
@@ -131,13 +128,15 @@ The centralized sequencer implements the following methods as part of the Generi
    - If a valid batch is found, it prepares the batch response, which includes the batch of transactions and a timestamp.
    - If no transactions are available, it returns an empty batch response.
 
+   Note that this method is used by the rollup node to get a sequencer soft-confirmed batch that the sequencer promises to publish to the DA layer.
+
 3. **VerifyBatch**:
-   - This method is used to verify the that a batch received from the sequencer was actually published on the DA layer. It takes a context and a request containing the rollup ID and the batch hash.
+   - This method is used to verify the that a batch received (soft-confirmed) from the sequencer was actually published on the DA layer. It takes a context and a request containing the rollup ID and the batch hash.
    - Similar to the other methods, it first validates the rollup ID.
    - It then checks if the provided batch hash exists in the internal data structure that tracks seen batches.
    - If the batch hash is found, it returns a response indicating that the batch is valid. If not, it returns a response indicating that the batch is invalid.
 
-   This method should be looking at the DA layer to update its view of which batches have been published. 
+   Once this method returns true for batch, a rollup node can mark the rollup block associated to this batch as `DA included` and mark it as fully confirmed from its view.
 
 These methods work together to ensure that the centralized sequencer can effectively manage transaction submissions, retrievals, and verifications, providing a reliable interface for rollup clients to interact with the sequencer.
 
