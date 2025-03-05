@@ -109,6 +109,32 @@ type Sequencer interface {
 ```
 
 These methods are exposed via a gRPC service that rollup clients can interact with.
+The centralized sequencer implements the following methods as part of the Generic Sequencer interface:
+
+1. **SubmitRollupBatchTxs**:
+   - This method is responsible for accepting a batch of transactions from a rollup client. It takes a context and a request containing the rollup ID and the batch of transactions to be submitted.
+   - The method first validates the rollup ID to ensure it matches the expected ID for the sequencer. If the ID is invalid, it returns an error.
+   - Upon successful validation, the method adds the transactions to the internal transaction queue (`TransactionQueue`) for processing.
+   - It then triggers the batch submission process, which involves retrieving the next batch of transactions and submitting them to the designated Data Availability (DA) layer.
+   - Finally, it returns a response indicating the success or failure of the submission.
+
+2. **GetNextBatch**:
+   - This method retrieves the next batch of transactions that are ready to be processed by the rollup. It takes a context and a request containing the rollup ID and the last batch hash.
+   - The method first checks if the rollup ID is valid. If not, it returns an error.
+   - It then verifies the last batch hash to ensure that the rollup client is requesting the correct next batch.
+   - If a valid batch is found, it prepares the batch response, which includes the batch of transactions and a timestamp.
+   - If no transactions are available, it returns an empty batch response.
+
+3. **VerifyBatch**:
+   - This method is used to verify the integrity and validity of a batch of transactions received from the sequencer. It takes a context and a request containing the rollup ID and the batch hash.
+   - Similar to the other methods, it first validates the rollup ID.
+   - It then checks if the provided batch hash exists in the internal data structure that tracks seen batches.
+   - If the batch hash is found, it returns a response indicating that the batch is valid. If not, it returns a response indicating that the batch is invalid.
+
+These methods work together to ensure that the centralized sequencer can effectively manage transaction submissions, retrievals, and verifications, providing a reliable interface for rollup clients to interact with the sequencer.
+
+
+
 
 ### Efficiency Considerations
 
@@ -126,6 +152,7 @@ These methods are exposed via a gRPC service that rollup clients can interact wi
 ### Logging, Monitoring, and Observability
 
 The sequencer provides the following metrics:
+
 - Gas price of DA submissions
 - Size of the last submitted blob
 - Transaction status counts
@@ -148,6 +175,7 @@ These metrics can be exposed via Prometheus for monitoring.
 ### Testing
 
 The centralized sequencer includes:
+
 - Unit tests for core functionality
 - Integration tests with a mock DA layer
 - Test coverage reporting via Codecov
