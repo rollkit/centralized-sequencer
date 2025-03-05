@@ -63,36 +63,44 @@ The centralized sequencer uses the following key data structures:
 1. **BatchQueue**: A queue to store batches of transactions waiting to be processed
    ```go
    type BatchQueue struct {
-       queue []sequencing.Batch
-       mu    sync.Mutex
+       queue []sequencing.Batch  // In-memory queue of batches waiting to be processed
+       mu    sync.Mutex          // Mutex to ensure thread-safe access to the queue
    }
    ```
 
 2. **Sequencer**: The main sequencer structure that implements the Generic Sequencer interface
-   ```go:centralized-sequencer/adr-11-centralized-sequencer.md
+   ```go
    type Sequencer struct {
-       da              goda.DA
-       namespace       []byte
-       rollupId        []byte
-       batchTime       time.Duration
-       bq              *BatchQueue
-       lastBatchHash   []byte
-       seenBatches     map[string]struct{}
-       seenBatchesMutex sync.RWMutex
-       metrics         *Metrics
-       db              *badger.DB
-       closed          atomic.Bool
+       dalc      *da.DAClient       // Client for interacting with the Data Availability layer
+       batchTime time.Duration      // Time interval between batch submissions
+       ctx       context.Context    // Context for controlling the sequencer's lifecycle
+       maxSize   uint64             // Maximum size of a batch in bytes
+
+       rollupId sequencing.RollupId // Identifier for the rollup this sequencer serves
+
+       tq                 *TransactionQueue  // Queue for storing pending transactions
+       lastBatchHash      []byte             // Hash of the last processed batch
+       lastBatchHashMutex sync.RWMutex       // Mutex for thread-safe access to lastBatchHash
+
+       seenBatches      map[string]struct{}  // Map to track batches that have been processed
+       seenBatchesMutex sync.Mutex           // Mutex for thread-safe access to seenBatches
+       bq               *BatchQueue          // Queue for storing batches ready for processing
+
+       db    *badger.DB  // BadgerDB instance for persistent storage
+       dbMux sync.Mutex  // Mutex for safe concurrent DB access
+
+       metrics *Metrics  // Structure to hold metrics for monitoring
    }
    ```
 
 3. **Metrics**: Structure to hold metrics for monitoring
    ```go
    type Metrics struct {
-       GasPrice            metrics.Gauge
-       LastBlobSize        metrics.Gauge
-       TransactionStatus   metrics.Counter
-       NumPendingBlocks    metrics.Gauge
-       IncludedBlockHeight metrics.Gauge
+       GasPrice            metrics.Gauge    // Tracks the gas price used for DA submissions
+       LastBlobSize        metrics.Gauge    // Tracks the size of the last submitted blob
+       TransactionStatus   metrics.Counter  // Counts transaction status outcomes
+       NumPendingBlocks    metrics.Gauge    // Tracks the number of blocks waiting to be submitted
+       IncludedBlockHeight metrics.Gauge    // Tracks the height of the last included block in the DA layer
    }
    ```
 
