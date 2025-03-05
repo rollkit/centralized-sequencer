@@ -134,10 +134,12 @@ The centralized sequencer implements the following methods as part of the Generi
    - If no transactions are available, it returns an empty batch response.
 
 3. **VerifyBatch**:
-   - This method is used to verify the integrity and validity of a batch of transactions received from the sequencer. It takes a context and a request containing the rollup ID and the batch hash.
+   - This method is used to verify the that a batch received from the sequencer was actually published on the DA layer. It takes a context and a request containing the rollup ID and the batch hash.
    - Similar to the other methods, it first validates the rollup ID.
    - It then checks if the provided batch hash exists in the internal data structure that tracks seen batches.
    - If the batch hash is found, it returns a response indicating that the batch is valid. If not, it returns a response indicating that the batch is invalid.
+
+   This method should be looking at the DA layer to update its view of which batches have been published. 
 
 These methods work together to ensure that the centralized sequencer can effectively manage transaction submissions, retrievals, and verifications, providing a reliable interface for rollup clients to interact with the sequencer.
 
