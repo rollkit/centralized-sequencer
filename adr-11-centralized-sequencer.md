@@ -35,10 +35,8 @@ This approach was not chosen because:
 We implement a standalone centralized sequencer that:
 
 1. Implements the Generic Sequencer interface from the `go-sequencing` package
-2. Exposes a gRPC service for rollup clients to submit transactions
-3. Batches transactions and submits them to a DA layer at regular intervals
-4. Maintains state to track submitted batches and provide verification
-5. Provides metrics for monitoring and observability
+2. Batches transactions and submits them to a DA layer at regular intervals
+3. Provides metrics for monitoring and observability
 
 The centralized sequencer is a separate repository and can be deployed as a standalone service or as a Docker container.
 
