@@ -2,14 +2,12 @@ module github.com/rollkit/centralized-sequencer
 
 go 1.22
 
-toolchain go1.22.3
-
 require (
 	github.com/dgraph-io/badger/v3 v3.2103.5
 	github.com/go-kit/kit v0.13.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/ipfs/go-log/v2 v2.5.1
-	github.com/prometheus/client_golang v1.21.0
+	github.com/prometheus/client_golang v1.21.1
 	github.com/rollkit/go-da v0.9.0
 	github.com/rollkit/go-sequencing v0.4.1
 	github.com/rollkit/rollkit v0.14.1
